@@ -596,7 +596,7 @@ const firebaseConfig = {
                             slot.className = `slot ${rowClass} booked-head ${colorClass}`;
                             if(booking.data.hasStaff) slot.classList.add('with-staff');
                             
-                            slot.innerHTML = `<span class="slot-name">${booking.data.name} <br><span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
+                            slot.innerHTML = `<span class="slot-name">${booking.data.name} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
                             if(booking.data.hasStaff) slot.innerHTML += `<span class="slot-staff">w/ ${booking.data.staffName}</span>`;
                             slot.onclick = () => openBookingModal(booking.id, booking.data, col.subIndex);
                             container.appendChild(slot);
@@ -815,4 +815,5 @@ const firebaseConfig = {
 </body>
 
 </html>
+
 
