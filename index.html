@@ -227,11 +227,17 @@
 
         /* Drag-and-Drop Styles */
         .slot.booked-head { cursor: grab; }
-        .slot.booked-head.dragging { cursor: grabbing; opacity: 0.5; }
-        .slot.drag-over-valid { background-color: #a5d6a7 !important; box-shadow: inset 0 0 8px rgba(76, 175, 80, 0.6); }
-        .slot.drag-over-invalid { background-color: #ef9a9a !important; box-shadow: inset 0 0 8px rgba(244, 67, 54, 0.6); }
-        
-        /* Ensure time tooltip shows during drag */
+        .slot.booked-head:active { cursor: grabbing; }
+        .slot.dragging { opacity: 0.5; cursor: grabbing; }
+        .slot.drag-over-valid { 
+            background-color: rgba(39, 174, 96, 0.3) !important; 
+            box-shadow: inset 0 0 0 2px var(--success);
+        }
+        .slot.drag-over-invalid { 
+            background-color: rgba(192, 57, 43, 0.3) !important; 
+            box-shadow: inset 0 0 0 2px var(--danger);
+        }
+        /* Keep tooltip visible during drag */
         .slot.drag-over-valid::after,
         .slot.drag-over-invalid::after {
             content: attr(data-time);
@@ -240,6 +246,32 @@
             background: #333; color: #fff; padding: 4px 8px; border-radius: 4px;
             font-size: 0.85em; white-space: nowrap; pointer-events: none; z-index: 20;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* Move Confirmation Modal Styles */
+        .move-detail { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 6px; 
+            margin-bottom: 15px; 
+            border: 1px solid #e9ecef;
+        }
+        .move-detail-row { 
+            display: flex; 
+            margin-bottom: 8px; 
+        }
+        .move-detail-row:last-child { margin-bottom: 0; }
+        .move-detail-label { 
+            font-weight: bold; 
+            width: 80px; 
+            color: #555; 
+        }
+        .move-detail-value { flex: 1; }
+        .move-arrow { 
+            text-align: center; 
+            font-size: 1.5rem; 
+            color: var(--primary); 
+            margin: 10px 0; 
         }
     </style>
 </head>
@@ -330,19 +362,39 @@
     </div>
 </div>
 
-<div id="confirmMoveModal" class="modal">
+<!-- Move Confirmation Modal -->
+<div id="moveModal" class="modal">
     <div class="modal-content">
-        <div class="modal-header">Confirm Booking Move</div>
+        <div class="modal-header">Confirm Reschedule</div>
+        <input type="hidden" id="moveSourceId">
+        <input type="hidden" id="moveTargetId">
         
-        <div style="margin: 20px 0;">
-            <p style="margin: 10px 0;"><strong>Patron:</strong> <span id="movePatronName"></span></p>
-            <p style="margin: 10px 0;"><strong>From:</strong> <span id="moveFromTime"></span></p>
-            <p style="margin: 10px 0;"><strong>To:</strong> <span id="moveToTime"></span></p>
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">Patron:</span>
+                <span class="move-detail-value" id="movePatronName"></span>
+            </div>
         </div>
         
-        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">From:</span>
+                <span class="move-detail-value" id="moveFromTime"></span>
+            </div>
+        </div>
+        
+        <div class="move-arrow">↓</div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">To:</span>
+                <span class="move-detail-value" id="moveToTime"></span>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button onclick="closeModal('moveModal')">Cancel</button>
             <button class="btn-success" onclick="executeMoveBooking()">Move Booking</button>
-            <button onclick="cancelMoveBooking()">Cancel</button>
         </div>
     </div>
 </div>
@@ -473,10 +525,13 @@ const firebaseConfig = {
     let bookingColorMap = {};
     let activeListenerUnsub = null;
 
-    // Drag-and-drop state
-    let dragSourceSlotId = null;
-    let dragSourceData = null;
-    let isMoving = false;
+    // DRAG-AND-DROP STATE
+    let dragState = {
+        sourceId: null,
+        sourceData: null,
+        isDragging: false,
+        isSaving: false
+    };
 
     function init() {
         const d = new Date();
@@ -651,7 +706,7 @@ const firebaseConfig = {
         } else {
             const endWeek = new Date(currentWeekStart);
             endWeek.setDate(endWeek.getDate() + 6);
-            document.getElementById('rangeDisplay').innerText = `${formatDateShort(currentWeekStart)} — ${formatDateShort(endWeek)}`;
+            document.getElementById('rangeDisplay').innerText = `${formatDateShort(currentWeekStart)} - ${formatDateShort(endWeek)}`;
             const y = currentWeekStart.getFullYear();
             const m = String(currentWeekStart.getMonth() + 1).padStart(2, '0');
             const d = String(currentWeekStart.getDate()).padStart(2, '0');
@@ -767,12 +822,13 @@ const firebaseConfig = {
                                 slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${booking.data.notes}</span>`;
                             }
 
-                            // Make booking draggable
+                            slot.onclick = () => openBookingModal(booking.id, booking.data, col.subIndex);
+                            
+                            // DRAG-AND-DROP: Make booked slots draggable
                             slot.draggable = true;
                             slot.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
                             slot.ondragend = handleDragEnd;
                             
-                            slot.onclick = () => openBookingModal(booking.id, booking.data, col.subIndex);
                             container.appendChild(slot);
                         } else {
                             return; 
@@ -780,14 +836,18 @@ const firebaseConfig = {
                     } else {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
-                        
-                        // Make empty slot a drop target
-                        slot.ondragover = (e) => handleDragOver(e, emptyId);
-                        slot.ondrop = (e) => handleDrop(e, emptyId);
-                        slot.ondragleave = handleDragLeave;
-                        
                         slot.onclick = () => openBookingModal(emptyId, null, col.subIndex);
                         slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
+                        
+                        // DRAG-AND-DROP: Set up empty slots as drop targets
+                        slot.dataset.slotId = emptyId;
+                        slot.dataset.dayIndex = col.dayIndex;
+                        slot.dataset.timeVal = timeVal;
+                        slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                        slot.ondragover = handleDragOver;
+                        slot.ondragleave = handleDragLeave;
+                        slot.ondrop = handleDrop;
+                        
                         container.appendChild(slot);
                     }
                 }
@@ -795,23 +855,30 @@ const firebaseConfig = {
         }
     }
 
-    // --- DRAG AND DROP HANDLERS ---
-    function handleDragStart(e, slotId, bookingData) {
-        if (isMoving) {
+    // --- DRAG-AND-DROP HANDLERS ---
+    function handleDragStart(e, bookingId, bookingData) {
+        // Block if a move is already in progress
+        if (dragState.isSaving) {
             e.preventDefault();
             return;
         }
         
-        dragSourceSlotId = slotId;
-        dragSourceData = bookingData;
+        dragState.sourceId = bookingId;
+        dragState.sourceData = bookingData;
+        dragState.isDragging = true;
         
+        // Firefox requires setData
+        e.dataTransfer.setData('text/plain', bookingId);
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', slotId); // Required for Firefox
         
-        e.target.classList.add('dragging');
+        // Add dragging class after a small delay to not affect the drag image
+        setTimeout(() => {
+            e.target.classList.add('dragging');
+        }, 0);
     }
 
     function handleDragEnd(e) {
+        dragState.isDragging = false;
         e.target.classList.remove('dragging');
         
         // Clean up any lingering drag-over classes
@@ -820,230 +887,255 @@ const firebaseConfig = {
         });
     }
 
-    function handleDragOver(e, targetSlotId) {
+    function handleDragOver(e) {
         e.preventDefault();
+        if (!dragState.isDragging || !dragState.sourceId) return;
         
-        if (!dragSourceSlotId || targetSlotId === dragSourceSlotId) {
-            return;
-        }
+        const slot = e.currentTarget;
+        const targetSlotId = slot.dataset.slotId;
         
-        const isValid = validateDropTarget(targetSlotId);
+        // Remove existing classes
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
         
-        if (isValid) {
+        // Validate the drop target
+        const validation = validateDropTarget(targetSlotId);
+        
+        if (validation.valid) {
+            slot.classList.add('drag-over-valid');
             e.dataTransfer.dropEffect = 'move';
-            e.target.classList.remove('drag-over-invalid');
-            e.target.classList.add('drag-over-valid');
         } else {
+            slot.classList.add('drag-over-invalid');
             e.dataTransfer.dropEffect = 'none';
-            e.target.classList.remove('drag-over-valid');
-            e.target.classList.add('drag-over-invalid');
         }
     }
 
     function handleDragLeave(e) {
-        e.target.classList.remove('drag-over-valid', 'drag-over-invalid');
+        e.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
     }
 
-    function handleDrop(e, targetSlotId) {
+    function handleDrop(e) {
         e.preventDefault();
-        e.stopPropagation();
         
-        e.target.classList.remove('drag-over-valid', 'drag-over-invalid');
+        const slot = e.currentTarget;
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
         
-        if (!dragSourceSlotId || targetSlotId === dragSourceSlotId) {
-            dragSourceSlotId = null;
-            dragSourceData = null;
+        if (!dragState.isDragging || !dragState.sourceId) return;
+        
+        const targetSlotId = slot.dataset.slotId;
+        
+        // Check for same-slot drop
+        if (isSameSlot(dragState.sourceId, targetSlotId)) {
+            // Do nothing for same-slot drops
             return;
         }
         
-        if (!validateDropTarget(targetSlotId)) {
-            showToast("Cannot move booking to that time slot", "error");
-            dragSourceSlotId = null;
-            dragSourceData = null;
+        // Validate the drop target
+        const validation = validateDropTarget(targetSlotId);
+        
+        if (!validation.valid) {
+            showToast(validation.reason, 'error');
             return;
         }
         
         // Show confirmation modal
-        showMoveConfirmation(targetSlotId);
+        showMoveConfirmation(dragState.sourceId, targetSlotId, dragState.sourceData);
+    }
+
+    function isSameSlot(sourceId, targetId) {
+        const res = resources.find(r => r.id === currentResId);
+        const prefix = res.id + "_";
+        
+        const sourceSuffix = sourceId.substring(prefix.length);
+        const targetSuffix = targetId.substring(prefix.length);
+        
+        const sourceParts = sourceSuffix.split('_');
+        const targetParts = targetSuffix.split('_');
+        
+        const sourceDay = parseInt(sourceParts[1]);
+        const sourceTime = parseFloat(sourceParts[2]);
+        const sourceSubRaw = sourceParts[3];
+        const sourceSub = normalizeSubIndex(sourceSubRaw);
+        
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
+        const targetSubRaw = targetParts[3];
+        const targetSub = normalizeSubIndex(targetSubRaw);
+        
+        return sourceDay === targetDay && 
+               sourceTime === targetTime && 
+               sourceSub === targetSub;
+    }
+
+    function normalizeSubIndex(val) {
+        if (val === null || val === undefined || val === '' || val === 'null' || val === 'undefined') {
+            return null;
+        }
+        return parseInt(val);
     }
 
     function validateDropTarget(targetSlotId) {
-        if (!dragSourceSlotId || !dragSourceData) return false;
-        
         const res = resources.find(r => r.id === currentResId);
-        if (!res) return false;
-        
         const prefix = res.id + "_";
+        const isDayView = res.viewMode === 'day';
         
-        // Parse source slot
-        const sourceSuffix = dragSourceSlotId.substring(prefix.length);
-        const sourceParts = sourceSuffix.split('_');
-        const sourceWeekKey = sourceParts[0];
-        
-        // Parse target slot
+        // Parse target slot ID
         const targetSuffix = targetSlotId.substring(prefix.length);
         const targetParts = targetSuffix.split('_');
         const targetWeekKey = targetParts[0];
-        const targetDayIdx = parseInt(targetParts[1]);
-        const targetStart = parseFloat(targetParts[2]);
-        const targetSubIdx = targetParts[3] ? parseInt(targetParts[3]) : null;
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
+        const targetSubRaw = targetParts[3];
+        const targetSub = normalizeSubIndex(targetSubRaw);
         
-        // Check same week
+        // Parse source slot ID
+        const sourceSuffix = dragState.sourceId.substring(prefix.length);
+        const sourceParts = sourceSuffix.split('_');
+        const sourceWeekKey = sourceParts[0];
+        
+        // Check week boundaries
         if (sourceWeekKey !== targetWeekKey) {
-            return false;
+            return { valid: false, reason: "Cannot move booking to a different week." };
         }
         
-        // Check if target is already booked
-        if (allBookings[targetSlotId]) {
-            return false;
+        // Get operating hours for target day
+        const dayStart = res.hours[targetDay * 2];
+        const dayEnd = res.hours[(targetDay * 2) + 1];
+        
+        // Check if slot is within operating hours
+        if (targetTime < dayStart || targetTime >= dayEnd || dayStart === dayEnd) {
+            return { valid: false, reason: "Target slot is outside operating hours." };
         }
         
-        // Check operating hours
-        const dayStart = res.hours[targetDayIdx * 2];
-        const dayEnd = res.hours[(targetDayIdx * 2) + 1];
-        
-        if (targetStart < dayStart || targetStart >= dayEnd) {
-            return false;
-        }
-        
-        // Check if booking duration fits before closing time
-        const bookingEnd = targetStart + dragSourceData.duration;
+        // Check if booking duration fits before closing
+        const duration = dragState.sourceData.duration;
+        const bookingEnd = targetTime + duration;
         if (bookingEnd > dayEnd) {
-            return false;
+            return { valid: false, reason: "Booking duration exceeds closing time." };
         }
         
-        // Check for conflicts with other bookings in the same column
-        const activeWeekKey = getWeekKey(currentWeekStart);
-        for (let key in allBookings) {
-            if (key === dragSourceSlotId) continue; // Skip the source booking
-            if (!key.startsWith(prefix + activeWeekKey)) continue;
+        // Check for conflicts with existing bookings
+        const activeWeekKey = getWeekKey(isDayView ? currentDayDate : currentWeekStart);
+        
+        for (const key of Object.keys(allBookings)) {
+            // Skip the booking we're moving
+            if (key === dragState.sourceId) continue;
+            
+            // Only check bookings for the same resource and week
+            if (!key.startsWith(res.id + "_" + activeWeekKey)) continue;
             
             const kSuffix = key.substring(prefix.length);
             const kParts = kSuffix.split('_');
-            const kDayIdx = parseInt(kParts[1]);
-            const kStart = parseFloat(kParts[2]);
-            const kSubIdx = kParts[3] ? parseInt(kParts[3]) : null;
+            const kDay = parseInt(kParts[1]);
+            const kTime = parseFloat(kParts[2]);
+            const kSubRaw = kParts[3];
+            const kSub = normalizeSubIndex(kSubRaw);
             
-            // Check if same day and sub-room
-            if (kDayIdx !== targetDayIdx) continue;
+            // Only check same column (same day and sub-room)
+            if (kDay !== targetDay) continue;
+            if (kSub !== targetSub) continue;
             
-            // Normalize sub-room comparison
-            const targetSub = targetSubIdx === null ? null : targetSubIdx;
-            const kSub = kSubIdx === null ? null : kSubIdx;
-            if (targetSub != kSub) continue;
-            
-            const kEnd = kStart + allBookings[key].duration;
+            const kDuration = allBookings[key].duration;
+            const kEnd = kTime + kDuration;
             
             // Check for overlap
-            if (targetStart < kEnd && bookingEnd > kStart) {
-                return false;
+            if (targetTime < kEnd && bookingEnd > kTime) {
+                return { valid: false, reason: "Conflicts with existing booking." };
             }
         }
         
-        return true;
+        return { valid: true };
     }
 
-    function showMoveConfirmation(targetSlotId) {
+    function showMoveConfirmation(sourceId, targetId, bookingData) {
         const res = resources.find(r => r.id === currentResId);
-        if (!res) return;
-        
         const prefix = res.id + "_";
         const isDayView = res.viewMode === 'day';
         
         // Parse source
-        const sourceSuffix = dragSourceSlotId.substring(prefix.length);
+        const sourceSuffix = sourceId.substring(prefix.length);
         const sourceParts = sourceSuffix.split('_');
-        const sourceWeekKey = sourceParts[0];
-        const sourceDayIdx = parseInt(sourceParts[1]);
-        const sourceStart = parseFloat(sourceParts[2]);
-        const sourceEnd = sourceStart + dragSourceData.duration;
+        const sourceDay = parseInt(sourceParts[1]);
+        const sourceTime = parseFloat(sourceParts[2]);
         
         // Parse target
-        const targetSuffix = targetSlotId.substring(prefix.length);
+        const targetSuffix = targetId.substring(prefix.length);
         const targetParts = targetSuffix.split('_');
-        const targetDayIdx = parseInt(targetParts[1]);
-        const targetStart = parseFloat(targetParts[2]);
-        const targetEnd = targetStart + dragSourceData.duration;
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
         
-        // Get dates for display
+        const duration = bookingData.duration;
+        
+        // Get day names and dates
         let sourceDate, targetDate;
-        
         if (isDayView) {
             sourceDate = new Date(currentDayDate);
             targetDate = new Date(currentDayDate);
         } else {
             sourceDate = new Date(currentWeekStart);
-            sourceDate.setDate(sourceDate.getDate() + sourceDayIdx);
+            sourceDate.setDate(sourceDate.getDate() + sourceDay);
             targetDate = new Date(currentWeekStart);
-            targetDate.setDate(targetDate.getDate() + targetDayIdx);
+            targetDate.setDate(targetDate.getDate() + targetDay);
         }
         
-        const formatDate = (date) => {
-            const options = { weekday: 'short', month: 'short', day: 'numeric' };
-            return date.toLocaleDateString('en-US', options);
-        };
+        const sourceDayName = DAYS[sourceDay];
+        const targetDayName = DAYS[targetDay];
         
-        document.getElementById('movePatronName').innerText = dragSourceData.name;
-        document.getElementById('moveFromTime').innerText = 
-            `${formatDate(sourceDate)}, ${formatTime(sourceStart)} - ${formatTime(sourceEnd)}`;
-        document.getElementById('moveToTime').innerText = 
-            `${formatDate(targetDate)}, ${formatTime(targetStart)} - ${formatTime(targetEnd)}`;
+        const sourceFormatted = `${sourceDayName} ${sourceDate.getMonth()+1}/${sourceDate.getDate()}, ${formatTime(sourceTime)} - ${formatTime(sourceTime + duration)}`;
+        const targetFormatted = `${targetDayName} ${targetDate.getMonth()+1}/${targetDate.getDate()}, ${formatTime(targetTime)} - ${formatTime(targetTime + duration)}`;
         
-        // Store target for execution
-        window.pendingMoveTarget = targetSlotId;
+        // Populate modal
+        document.getElementById('moveSourceId').value = sourceId;
+        document.getElementById('moveTargetId').value = targetId;
+        document.getElementById('movePatronName').innerText = bookingData.name;
+        document.getElementById('moveFromTime').innerText = sourceFormatted;
+        document.getElementById('moveToTime').innerText = targetFormatted;
         
-        document.getElementById('confirmMoveModal').style.display = 'flex';
-    }
-
-    function cancelMoveBooking() {
-        dragSourceSlotId = null;
-        dragSourceData = null;
-        window.pendingMoveTarget = null;
-        closeModal('confirmMoveModal');
+        // Show modal
+        document.getElementById('moveModal').style.display = 'flex';
     }
 
     async function executeMoveBooking() {
-        if (!window.pendingMoveTarget || !dragSourceSlotId || !dragSourceData) {
-            cancelMoveBooking();
+        if (dragState.isSaving) return;
+        
+        const sourceId = document.getElementById('moveSourceId').value;
+        const targetId = document.getElementById('moveTargetId').value;
+        
+        if (!sourceId || !targetId || !allBookings[sourceId]) {
+            showToast("Invalid booking data.", "error");
+            closeModal('moveModal');
             return;
         }
         
-        if (isMoving) {
-            showToast("Please wait, move in progress", "error");
-            return;
-        }
-        
-        isMoving = true;
+        dragState.isSaving = true;
         showLoading(true);
-        closeModal('confirmMoveModal');
-        
-        const targetSlotId = window.pendingMoveTarget;
-        const sourceSlotId = dragSourceSlotId;
-        const bookingData = { ...dragSourceData };
+        closeModal('moveModal');
         
         try {
+            // Copy booking data
+            const bookingData = { ...allBookings[sourceId] };
+            
+            // Use batch write for atomic operation
             const batch = db.batch();
             
             // Delete old document
-            const oldRef = db.collection('appointments').doc(sourceSlotId);
+            const oldRef = db.collection('appointments').doc(sourceId);
             batch.delete(oldRef);
             
-            // Create new document
-            const newRef = db.collection('appointments').doc(targetSlotId);
+            // Create new document with same data
+            const newRef = db.collection('appointments').doc(targetId);
             batch.set(newRef, bookingData);
             
             await batch.commit();
             
-            showToast("Booking moved successfully", "success");
+            showToast("Booking moved successfully!", "success");
         } catch (error) {
-            showToast("Error moving booking: " + error.message, "error");
             console.error("Move error:", error);
+            showToast("Failed to move booking: " + error.message, "error");
         } finally {
-            isMoving = false;
+            dragState.isSaving = false;
+            dragState.sourceId = null;
+            dragState.sourceData = null;
             showLoading(false);
-            dragSourceSlotId = null;
-            dragSourceData = null;
-            window.pendingMoveTarget = null;
         }
     }
 
