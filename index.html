@@ -634,6 +634,7 @@ const firebaseConfig = {
         overlayElement: null,
         tooltipElement: null
     };
+    let lastResizeEndTime = 0;
 
     function init() {
         const d = new Date();
@@ -959,9 +960,10 @@ const firebaseConfig = {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
                         
-                        // Click opens modal (but only if not dragging to create)
+                        // Click opens modal (but only if not dragging to create or just finished resizing)
                         slot.onclick = (e) => {
                             if (selectionState.active) return;
+                            if (Date.now() - lastResizeEndTime < 200) return;
                             openBookingModal(emptyId, null, col.subIndex);
                         };
                         
@@ -1342,6 +1344,7 @@ const firebaseConfig = {
         // Only start on left click, not during other operations
         if (e.button !== 0) return;
         if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
+        if (Date.now() - lastResizeEndTime < 200) return;
         
         e.preventDefault();
         
@@ -1669,6 +1672,9 @@ const firebaseConfig = {
         
         document.removeEventListener('mousemove', doResize);
         document.removeEventListener('mouseup', endResize);
+        
+        // Track when resize ended to prevent accidental clicks
+        lastResizeEndTime = Date.now();
         
         // Clean up overlay and tooltip
         if (resizeState.overlayElement) {
