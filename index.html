@@ -224,6 +224,23 @@
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.success { background-color: var(--success); }
         .toast.error { background-color: var(--danger); }
+
+        /* Drag-and-Drop Styles */
+        .slot.booked-head { cursor: grab; }
+        .slot.booked-head.dragging { cursor: grabbing; opacity: 0.5; }
+        .slot.drag-over-valid { background-color: #a5d6a7 !important; box-shadow: inset 0 0 8px rgba(76, 175, 80, 0.6); }
+        .slot.drag-over-invalid { background-color: #ef9a9a !important; box-shadow: inset 0 0 8px rgba(244, 67, 54, 0.6); }
+        
+        /* Ensure time tooltip shows during drag */
+        .slot.drag-over-valid::after,
+        .slot.drag-over-invalid::after {
+            content: attr(data-time);
+            position: absolute;
+            bottom: 100%; left: 50%; transform: translateX(-50%);
+            background: #333; color: #fff; padding: 4px 8px; border-radius: 4px;
+            font-size: 0.85em; white-space: nowrap; pointer-events: none; z-index: 20;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
@@ -309,6 +326,23 @@
             <button class="btn-success" onclick="saveBooking()">Save Booking</button>
             <button class="btn-danger" onclick="deleteBooking()">Delete</button>
             <button onclick="closeModal('bookingModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirmMoveModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Confirm Booking Move</div>
+        
+        <div style="margin: 20px 0;">
+            <p style="margin: 10px 0;"><strong>Patron:</strong> <span id="movePatronName"></span></p>
+            <p style="margin: 10px 0;"><strong>From:</strong> <span id="moveFromTime"></span></p>
+            <p style="margin: 10px 0;"><strong>To:</strong> <span id="moveToTime"></span></p>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-success" onclick="executeMoveBooking()">Move Booking</button>
+            <button onclick="cancelMoveBooking()">Cancel</button>
         </div>
     </div>
 </div>
@@ -438,6 +472,11 @@ const firebaseConfig = {
     let dailyMap = []; 
     let bookingColorMap = {};
     let activeListenerUnsub = null;
+
+    // Drag-and-drop state
+    let dragSourceSlotId = null;
+    let dragSourceData = null;
+    let isMoving = false;
 
     function init() {
         const d = new Date();
@@ -728,6 +767,11 @@ const firebaseConfig = {
                                 slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${booking.data.notes}</span>`;
                             }
 
+                            // Make booking draggable
+                            slot.draggable = true;
+                            slot.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
+                            slot.ondragend = handleDragEnd;
+                            
                             slot.onclick = () => openBookingModal(booking.id, booking.data, col.subIndex);
                             container.appendChild(slot);
                         } else {
@@ -736,12 +780,270 @@ const firebaseConfig = {
                     } else {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
+                        
+                        // Make empty slot a drop target
+                        slot.ondragover = (e) => handleDragOver(e, emptyId);
+                        slot.ondrop = (e) => handleDrop(e, emptyId);
+                        slot.ondragleave = handleDragLeave;
+                        
                         slot.onclick = () => openBookingModal(emptyId, null, col.subIndex);
                         slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
                         container.appendChild(slot);
                     }
                 }
             });
+        }
+    }
+
+    // --- DRAG AND DROP HANDLERS ---
+    function handleDragStart(e, slotId, bookingData) {
+        if (isMoving) {
+            e.preventDefault();
+            return;
+        }
+        
+        dragSourceSlotId = slotId;
+        dragSourceData = bookingData;
+        
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', slotId); // Required for Firefox
+        
+        e.target.classList.add('dragging');
+    }
+
+    function handleDragEnd(e) {
+        e.target.classList.remove('dragging');
+        
+        // Clean up any lingering drag-over classes
+        document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
+            el.classList.remove('drag-over-valid', 'drag-over-invalid');
+        });
+    }
+
+    function handleDragOver(e, targetSlotId) {
+        e.preventDefault();
+        
+        if (!dragSourceSlotId || targetSlotId === dragSourceSlotId) {
+            return;
+        }
+        
+        const isValid = validateDropTarget(targetSlotId);
+        
+        if (isValid) {
+            e.dataTransfer.dropEffect = 'move';
+            e.target.classList.remove('drag-over-invalid');
+            e.target.classList.add('drag-over-valid');
+        } else {
+            e.dataTransfer.dropEffect = 'none';
+            e.target.classList.remove('drag-over-valid');
+            e.target.classList.add('drag-over-invalid');
+        }
+    }
+
+    function handleDragLeave(e) {
+        e.target.classList.remove('drag-over-valid', 'drag-over-invalid');
+    }
+
+    function handleDrop(e, targetSlotId) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        e.target.classList.remove('drag-over-valid', 'drag-over-invalid');
+        
+        if (!dragSourceSlotId || targetSlotId === dragSourceSlotId) {
+            dragSourceSlotId = null;
+            dragSourceData = null;
+            return;
+        }
+        
+        if (!validateDropTarget(targetSlotId)) {
+            showToast("Cannot move booking to that time slot", "error");
+            dragSourceSlotId = null;
+            dragSourceData = null;
+            return;
+        }
+        
+        // Show confirmation modal
+        showMoveConfirmation(targetSlotId);
+    }
+
+    function validateDropTarget(targetSlotId) {
+        if (!dragSourceSlotId || !dragSourceData) return false;
+        
+        const res = resources.find(r => r.id === currentResId);
+        if (!res) return false;
+        
+        const prefix = res.id + "_";
+        
+        // Parse source slot
+        const sourceSuffix = dragSourceSlotId.substring(prefix.length);
+        const sourceParts = sourceSuffix.split('_');
+        const sourceWeekKey = sourceParts[0];
+        
+        // Parse target slot
+        const targetSuffix = targetSlotId.substring(prefix.length);
+        const targetParts = targetSuffix.split('_');
+        const targetWeekKey = targetParts[0];
+        const targetDayIdx = parseInt(targetParts[1]);
+        const targetStart = parseFloat(targetParts[2]);
+        const targetSubIdx = targetParts[3] ? parseInt(targetParts[3]) : null;
+        
+        // Check same week
+        if (sourceWeekKey !== targetWeekKey) {
+            return false;
+        }
+        
+        // Check if target is already booked
+        if (allBookings[targetSlotId]) {
+            return false;
+        }
+        
+        // Check operating hours
+        const dayStart = res.hours[targetDayIdx * 2];
+        const dayEnd = res.hours[(targetDayIdx * 2) + 1];
+        
+        if (targetStart < dayStart || targetStart >= dayEnd) {
+            return false;
+        }
+        
+        // Check if booking duration fits before closing time
+        const bookingEnd = targetStart + dragSourceData.duration;
+        if (bookingEnd > dayEnd) {
+            return false;
+        }
+        
+        // Check for conflicts with other bookings in the same column
+        const activeWeekKey = getWeekKey(currentWeekStart);
+        for (let key in allBookings) {
+            if (key === dragSourceSlotId) continue; // Skip the source booking
+            if (!key.startsWith(prefix + activeWeekKey)) continue;
+            
+            const kSuffix = key.substring(prefix.length);
+            const kParts = kSuffix.split('_');
+            const kDayIdx = parseInt(kParts[1]);
+            const kStart = parseFloat(kParts[2]);
+            const kSubIdx = kParts[3] ? parseInt(kParts[3]) : null;
+            
+            // Check if same day and sub-room
+            if (kDayIdx !== targetDayIdx) continue;
+            
+            // Normalize sub-room comparison
+            const targetSub = targetSubIdx === null ? null : targetSubIdx;
+            const kSub = kSubIdx === null ? null : kSubIdx;
+            if (targetSub != kSub) continue;
+            
+            const kEnd = kStart + allBookings[key].duration;
+            
+            // Check for overlap
+            if (targetStart < kEnd && bookingEnd > kStart) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    function showMoveConfirmation(targetSlotId) {
+        const res = resources.find(r => r.id === currentResId);
+        if (!res) return;
+        
+        const prefix = res.id + "_";
+        const isDayView = res.viewMode === 'day';
+        
+        // Parse source
+        const sourceSuffix = dragSourceSlotId.substring(prefix.length);
+        const sourceParts = sourceSuffix.split('_');
+        const sourceWeekKey = sourceParts[0];
+        const sourceDayIdx = parseInt(sourceParts[1]);
+        const sourceStart = parseFloat(sourceParts[2]);
+        const sourceEnd = sourceStart + dragSourceData.duration;
+        
+        // Parse target
+        const targetSuffix = targetSlotId.substring(prefix.length);
+        const targetParts = targetSuffix.split('_');
+        const targetDayIdx = parseInt(targetParts[1]);
+        const targetStart = parseFloat(targetParts[2]);
+        const targetEnd = targetStart + dragSourceData.duration;
+        
+        // Get dates for display
+        let sourceDate, targetDate;
+        
+        if (isDayView) {
+            sourceDate = new Date(currentDayDate);
+            targetDate = new Date(currentDayDate);
+        } else {
+            sourceDate = new Date(currentWeekStart);
+            sourceDate.setDate(sourceDate.getDate() + sourceDayIdx);
+            targetDate = new Date(currentWeekStart);
+            targetDate.setDate(targetDate.getDate() + targetDayIdx);
+        }
+        
+        const formatDate = (date) => {
+            const options = { weekday: 'short', month: 'short', day: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        };
+        
+        document.getElementById('movePatronName').innerText = dragSourceData.name;
+        document.getElementById('moveFromTime').innerText = 
+            `${formatDate(sourceDate)}, ${formatTime(sourceStart)} - ${formatTime(sourceEnd)}`;
+        document.getElementById('moveToTime').innerText = 
+            `${formatDate(targetDate)}, ${formatTime(targetStart)} - ${formatTime(targetEnd)}`;
+        
+        // Store target for execution
+        window.pendingMoveTarget = targetSlotId;
+        
+        document.getElementById('confirmMoveModal').style.display = 'flex';
+    }
+
+    function cancelMoveBooking() {
+        dragSourceSlotId = null;
+        dragSourceData = null;
+        window.pendingMoveTarget = null;
+        closeModal('confirmMoveModal');
+    }
+
+    async function executeMoveBooking() {
+        if (!window.pendingMoveTarget || !dragSourceSlotId || !dragSourceData) {
+            cancelMoveBooking();
+            return;
+        }
+        
+        if (isMoving) {
+            showToast("Please wait, move in progress", "error");
+            return;
+        }
+        
+        isMoving = true;
+        showLoading(true);
+        closeModal('confirmMoveModal');
+        
+        const targetSlotId = window.pendingMoveTarget;
+        const sourceSlotId = dragSourceSlotId;
+        const bookingData = { ...dragSourceData };
+        
+        try {
+            const batch = db.batch();
+            
+            // Delete old document
+            const oldRef = db.collection('appointments').doc(sourceSlotId);
+            batch.delete(oldRef);
+            
+            // Create new document
+            const newRef = db.collection('appointments').doc(targetSlotId);
+            batch.set(newRef, bookingData);
+            
+            await batch.commit();
+            
+            showToast("Booking moved successfully", "success");
+        } catch (error) {
+            showToast("Error moving booking: " + error.message, "error");
+            console.error("Move error:", error);
+        } finally {
+            isMoving = false;
+            showLoading(false);
+            dragSourceSlotId = null;
+            dragSourceData = null;
+            window.pendingMoveTarget = null;
         }
     }
 
@@ -1048,11 +1350,3 @@ const firebaseConfig = {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
