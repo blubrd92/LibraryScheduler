@@ -247,6 +247,11 @@
             font-size: 0.85em; white-space: nowrap; pointer-events: none; z-index: 20;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
+        /* Allow tooltip to overflow on booked slots during drag */
+        .slot.booked-head.drag-over-valid,
+        .slot.booked-head.drag-over-invalid {
+            overflow: visible;
+        }
 
         /* Move Confirmation Modal Styles */
         .move-detail { 
@@ -393,7 +398,7 @@
         </div>
         
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button onclick="closeModal('moveModal')">Cancel</button>
+            <button onclick="cancelMove()">Cancel</button>
             <button class="btn-success" onclick="executeMoveBooking()">Move Booking</button>
         </div>
     </div>
@@ -898,6 +903,12 @@ const firebaseConfig = {
                 el.removeAttribute('data-time');
             }
         });
+        
+        // Clear drag state unless modal is open (user is confirming move)
+        if (document.getElementById('moveModal').style.display !== 'flex') {
+            dragState.sourceId = null;
+            dragState.sourceData = null;
+        }
     }
 
     function handleDragOver(e) {
@@ -1202,6 +1213,13 @@ const firebaseConfig = {
         
         // Show modal
         document.getElementById('moveModal').style.display = 'flex';
+    }
+
+    function cancelMove() {
+        closeModal('moveModal');
+        // Clear drag state on cancel
+        dragState.sourceId = null;
+        dragState.sourceData = null;
     }
 
     async function executeMoveBooking() {
