@@ -253,47 +253,63 @@
             overflow: visible;
         }
 
+        /* Drag-to-Create Selection */
+        .slot.selecting {
+            background-color: rgba(39, 174, 96, 0.3) !important;
+        }
+        .selection-overlay {
+            position: fixed;
+            background: rgba(39, 174, 96, 0.4);
+            border: 2px solid var(--success);
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .selection-tooltip {
+            position: fixed;
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 101;
+            pointer-events: none;
+        }
+
         /* Resize Handle */
         .resize-handle {
             position: absolute;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 8px;
+            height: 10px;
             cursor: ns-resize;
-            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.2));
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.15));
             border-radius: 0 0 4px 4px;
             transition: background 0.15s;
         }
         .resize-handle:hover {
-            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.4));
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.3));
         }
-        .slot.booked-head.resizing {
-            z-index: 100;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            overflow: visible;
-        }
-        .resize-preview {
-            position: absolute;
-            left: 0;
-            right: 0;
-            background: rgba(39, 174, 96, 0.3);
+        .resize-overlay {
+            position: fixed;
+            background: rgba(39, 174, 96, 0.4);
             border: 2px dashed var(--success);
-            border-top: none;
+            border-radius: 4px;
             pointer-events: none;
-            z-index: 99;
+            z-index: 100;
         }
-        .resize-time-tooltip {
-            position: absolute;
-            right: 5px;
-            bottom: 5px;
+        .resize-tooltip {
+            position: fixed;
             background: #333;
             color: #fff;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 4px;
-            font-size: 0.85em;
+            font-size: 0.9em;
             white-space: nowrap;
             z-index: 101;
+            pointer-events: none;
         }
 
         /* Move Confirmation Modal Styles */
@@ -581,12 +597,30 @@ const firebaseConfig = {
         isSaving: false
     };
 
-    // RESIZE STATE
+    // DRAG-TO-CREATE SELECTION STATE
+    let selectionState = {
+        active: false,
+        startSlotId: null,
+        startTime: 0,
+        startDayIndex: 0,
+        subIndex: null,
+        startY: 0,
+        slotHeight: 0,
+        maxDuration: 0,
+        currentDuration: 0.5,
+        res: null,
+        activeWeekKey: null,
+        startSlotRect: null,
+        overlayElement: null,
+        tooltipElement: null
+    };
+
+    // RESIZE STATE (for existing bookings)
     let resizeState = {
         active: false,
         bookingId: null,
         bookingData: null,
-        slotElement: null,
+        bookingStart: 0,
         col: null,
         res: null,
         activeWeekKey: null,
@@ -596,8 +630,8 @@ const firebaseConfig = {
         currentDuration: 0,
         minDuration: 0.5,
         maxDuration: 0,
-        bookingStart: 0,
-        previewElement: null,
+        originalRect: null,
+        overlayElement: null,
         tooltipElement: null
     };
 
@@ -924,7 +958,13 @@ const firebaseConfig = {
                     } else {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
-                        slot.onclick = () => openBookingModal(emptyId, null, col.subIndex);
+                        
+                        // Click opens modal (but only if not dragging to create)
+                        slot.onclick = (e) => {
+                            if (selectionState.active) return;
+                            openBookingModal(emptyId, null, col.subIndex);
+                        };
+                        
                         slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
                         
                         // DRAG-AND-DROP: Set up empty slots as drop targets
@@ -935,6 +975,9 @@ const firebaseConfig = {
                         slot.ondragover = handleDragOver;
                         slot.ondragleave = handleDragLeave;
                         slot.ondrop = handleDrop;
+                        
+                        // DRAG-TO-CREATE: mousedown starts selection
+                        slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
                         
                         container.appendChild(slot);
                     }
@@ -1294,6 +1337,216 @@ const firebaseConfig = {
         document.getElementById('moveModal').style.display = 'flex';
     }
 
+    // --- DRAG-TO-CREATE HANDLERS ---
+    function startSelection(e, slotId, timeVal, col, res, activeWeekKey, slotElement) {
+        // Only start on left click, not during other operations
+        if (e.button !== 0) return;
+        if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
+        
+        e.preventDefault();
+        
+        // Calculate max duration based on closing time and collisions
+        const dayEnd = res.hours[(col.dayIndex * 2) + 1];
+        const maxByClose = dayEnd - timeVal;
+        const maxByResource = res.maxDuration;
+        
+        // Find next booking in same column
+        let nextBookingStart = dayEnd;
+        const prefix = res.id + "_";
+        Object.keys(allBookings).forEach(key => {
+            if (!key.startsWith(prefix + activeWeekKey)) return;
+            
+            const kSuffix = key.substring(prefix.length);
+            const kParts = kSuffix.split('_');
+            const kDay = parseInt(kParts[1]);
+            const kTime = parseFloat(kParts[2]);
+            const kSubRaw = kParts[3];
+            const kSub = normalizeSubIndex(kSubRaw);
+            
+            if (kDay !== col.dayIndex) return;
+            if (kSub !== normalizeSubIndex(col.subIndex)) return;
+            
+            if (kTime >= timeVal && kTime < nextBookingStart) {
+                nextBookingStart = kTime;
+            }
+        });
+        
+        const maxByCollision = nextBookingStart - timeVal;
+        const maxDuration = Math.min(maxByClose, maxByResource, maxByCollision);
+        
+        if (maxDuration < 0.5) return;
+        
+        const rect = slotElement.getBoundingClientRect();
+        
+        selectionState = {
+            active: true,
+            startSlotId: slotId,
+            startTime: timeVal,
+            startDayIndex: col.dayIndex,
+            subIndex: col.subIndex,
+            startY: e.clientY,
+            slotHeight: rect.height,
+            maxDuration: maxDuration,
+            currentDuration: 0.5,
+            res: res,
+            activeWeekKey: activeWeekKey,
+            startSlotRect: rect,
+            overlayElement: null,
+            tooltipElement: null
+        };
+        
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'selection-overlay';
+        overlay.style.left = rect.left + 'px';
+        overlay.style.top = rect.top + 'px';
+        overlay.style.width = rect.width + 'px';
+        overlay.style.height = rect.height + 'px';
+        document.body.appendChild(overlay);
+        selectionState.overlayElement = overlay;
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'selection-tooltip';
+        tooltip.innerText = `${formatTime(timeVal)} - ${formatTime(timeVal + 0.5)} (0.5h)`;
+        tooltip.style.left = (rect.right + 10) + 'px';
+        tooltip.style.top = rect.top + 'px';
+        document.body.appendChild(tooltip);
+        selectionState.tooltipElement = tooltip;
+        
+        document.addEventListener('mousemove', doSelection);
+        document.addEventListener('mouseup', endSelection);
+    }
+    
+    function doSelection(e) {
+        if (!selectionState.active) return;
+        
+        const deltaY = e.clientY - selectionState.startY;
+        const slotsDelta = Math.floor(deltaY / selectionState.slotHeight);
+        let newDuration = 0.5 + (slotsDelta * 0.5);
+        newDuration = Math.max(0.5, Math.min(selectionState.maxDuration, newDuration));
+        
+        selectionState.currentDuration = newDuration;
+        
+        if (selectionState.overlayElement) {
+            const newHeight = selectionState.slotHeight * (newDuration * 2);
+            selectionState.overlayElement.style.height = newHeight + 'px';
+        }
+        
+        if (selectionState.tooltipElement) {
+            const endTime = selectionState.startTime + newDuration;
+            selectionState.tooltipElement.innerText = `${formatTime(selectionState.startTime)} - ${formatTime(endTime)} (${newDuration}h)`;
+        }
+    }
+    
+    function endSelection(e) {
+        if (!selectionState.active) return;
+        
+        document.removeEventListener('mousemove', doSelection);
+        document.removeEventListener('mouseup', endSelection);
+        
+        if (selectionState.overlayElement) {
+            selectionState.overlayElement.remove();
+        }
+        if (selectionState.tooltipElement) {
+            selectionState.tooltipElement.remove();
+        }
+        
+        const duration = selectionState.currentDuration;
+        const slotId = selectionState.startSlotId;
+        const subIndex = selectionState.subIndex;
+        
+        selectionState = {
+            active: false,
+            startSlotId: null,
+            startTime: 0,
+            startDayIndex: 0,
+            subIndex: null,
+            startY: 0,
+            slotHeight: 0,
+            maxDuration: 0,
+            currentDuration: 0.5,
+            res: null,
+            activeWeekKey: null,
+            startSlotRect: null,
+            overlayElement: null,
+            tooltipElement: null
+        };
+        
+        openBookingModalWithDuration(slotId, subIndex, duration);
+    }
+    
+    function openBookingModalWithDuration(slotId, subIndex, presetDuration) {
+        const modal = document.getElementById('bookingModal');
+        const res = resources.find(r => r.id === currentResId);
+        
+        const prefix = res.id + "_";
+        const suffix = slotId.substring(prefix.length);
+        const parts = suffix.split('_');
+        const dayIdx = parseInt(parts[1]);
+        const start = parseFloat(parts[2]);
+        
+        document.getElementById('subRoomIndex').value = (subIndex !== null && subIndex !== undefined) ? subIndex : '';
+
+        const dayEnd = res.hours[(dayIdx * 2) + 1];
+        const activeWeekKey = parts[0];
+        const currentSubIdx = document.getElementById('subRoomIndex').value;
+        let conflictingStarts = [];
+        
+        Object.keys(allBookings).forEach(k => {
+            if (k.startsWith(res.id + "_" + activeWeekKey) && k !== slotId) {
+                const pSuffix = k.substring(prefix.length);
+                const p = pSuffix.split('_');
+                const bDay = parseInt(p[1]);
+                const bStart = parseFloat(p[2]);
+                const bSub = p[3];
+                
+                if (bDay === dayIdx) {
+                    const subMatch = (bSub == currentSubIdx) || (!bSub && !currentSubIdx);
+                    if (subMatch) { if (bStart > start) conflictingStarts.push(bStart); }
+                }
+            }
+        });
+        
+        conflictingStarts.sort((a,b) => a - b);
+        const nextStart = conflictingStarts.length > 0 ? conflictingStarts[0] : dayEnd;
+        const maxAvailable = nextStart - start;
+        const limit = Math.min(maxAvailable, res.maxDuration);
+
+        document.getElementById('slotId').value = slotId;
+        document.getElementById('bookName').value = '';
+        document.getElementById('bookNotes').value = '';
+        document.getElementById('bookShowNotes').checked = res.defaultShowNotes || false;
+
+        const showStaff = res.hasStaffField;
+        document.getElementById('staffSection').style.display = showStaff ? 'block' : 'none';
+        document.getElementById('bookHasStaff').checked = false;
+        document.getElementById('bookStaffName').value = '';
+        toggleStaffInput();
+
+        const durSel = document.getElementById('bookDuration');
+        durSel.innerHTML = '';
+        const maxIterations = res.maxDuration * 2;
+        for (let i = 1; i <= maxIterations; i++) {
+            const val = i * 0.5;
+            if (val > limit) continue;
+            const opt = document.createElement('option');
+            opt.value = val;
+            const endVal = start + val;
+            opt.innerText = `${val} ${val === 1 ? "Hour" : "Hours"} (${formatTime(start)} - ${formatTime(endVal)})`;
+            if (val === presetDuration) opt.selected = true;
+            durSel.appendChild(opt);
+        }
+        if (durSel.options.length === 0) {
+            const opt = document.createElement('option');
+            opt.innerText = "No time available";
+            durSel.appendChild(opt);
+        }
+        
+        modal.style.display = 'flex';
+        document.getElementById('bookName').focus();
+    }
+
     function cancelMove() {
         closeModal('moveModal');
         // Clear drag state on cancel
@@ -1307,7 +1560,7 @@ const firebaseConfig = {
         e.stopPropagation();
         
         // Block if saving or another operation is active
-        if (dragState.isSaving || dragState.isDragging || resizeState.active) return;
+        if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
         
         // Calculate max duration based on closing time and collisions
         const dayEnd = res.hours[(col.dayIndex * 2) + 1];
@@ -1340,14 +1593,14 @@ const firebaseConfig = {
         const maxByCollision = nextBookingStart - booking.start;
         const maxDuration = Math.min(maxByClose, maxByResource, maxByCollision);
         
-        // Get slot height (height of one 30-min slot)
-        const slotHeight = slotElement.getBoundingClientRect().height / (booking.data.duration * 2);
+        const rect = slotElement.getBoundingClientRect();
+        const slotHeight = rect.height / (booking.data.duration * 2);
         
         resizeState = {
             active: true,
             bookingId: booking.id,
             bookingData: booking.data,
-            slotElement: slotElement,
+            bookingStart: booking.start,
             col: col,
             res: res,
             activeWeekKey: activeWeekKey,
@@ -1357,21 +1610,30 @@ const firebaseConfig = {
             currentDuration: booking.data.duration,
             minDuration: 0.5,
             maxDuration: maxDuration,
-            bookingStart: booking.start,
-            previewElement: null,
+            originalRect: rect,
+            overlayElement: null,
             tooltipElement: null
         };
         
-        slotElement.classList.add('resizing');
+        // Create overlay positioned over the booking
+        const overlay = document.createElement('div');
+        overlay.className = 'resize-overlay';
+        overlay.style.left = rect.left + 'px';
+        overlay.style.top = rect.top + 'px';
+        overlay.style.width = rect.width + 'px';
+        overlay.style.height = rect.height + 'px';
+        document.body.appendChild(overlay);
+        resizeState.overlayElement = overlay;
         
         // Create tooltip
         const tooltip = document.createElement('div');
-        tooltip.className = 'resize-time-tooltip';
-        tooltip.innerText = formatTime(booking.start + booking.data.duration);
-        slotElement.appendChild(tooltip);
+        tooltip.className = 'resize-tooltip';
+        tooltip.innerText = `${formatTime(booking.start)} - ${formatTime(booking.start + booking.data.duration)} (${booking.data.duration}h)`;
+        tooltip.style.left = (rect.right + 10) + 'px';
+        tooltip.style.top = rect.top + 'px';
+        document.body.appendChild(tooltip);
         resizeState.tooltipElement = tooltip;
         
-        // Add document listeners
         document.addEventListener('mousemove', doResize);
         document.addEventListener('mouseup', endResize);
     }
@@ -1385,21 +1647,21 @@ const firebaseConfig = {
         
         let newDuration = resizeState.originalDuration + durationDelta;
         newDuration = Math.max(resizeState.minDuration, Math.min(resizeState.maxDuration, newDuration));
-        
-        // Round to 0.5
         newDuration = Math.round(newDuration * 2) / 2;
         
-        const newSpan = newDuration * 2;
-        resizeState.slotElement.style.gridRow = `span ${newSpan}`;
+        resizeState.currentDuration = newDuration;
+        
+        // Update overlay height (not the actual grid element)
+        if (resizeState.overlayElement) {
+            const newHeight = resizeState.slotHeight * (newDuration * 2);
+            resizeState.overlayElement.style.height = newHeight + 'px';
+        }
         
         // Update tooltip
         if (resizeState.tooltipElement) {
             const newEndTime = resizeState.bookingStart + newDuration;
             resizeState.tooltipElement.innerText = `${formatTime(resizeState.bookingStart)} - ${formatTime(newEndTime)} (${newDuration}h)`;
         }
-        
-        // Store current duration for save
-        resizeState.currentDuration = newDuration;
     }
     
     async function endResize(e) {
@@ -1408,42 +1670,25 @@ const firebaseConfig = {
         document.removeEventListener('mousemove', doResize);
         document.removeEventListener('mouseup', endResize);
         
-        const slotElement = resizeState.slotElement;
-        slotElement.classList.remove('resizing');
-        
-        // Remove tooltip
+        // Clean up overlay and tooltip
+        if (resizeState.overlayElement) {
+            resizeState.overlayElement.remove();
+        }
         if (resizeState.tooltipElement) {
             resizeState.tooltipElement.remove();
         }
         
-        const newDuration = resizeState.currentDuration || resizeState.originalDuration;
-        
-        // Only save if duration actually changed
-        if (newDuration !== resizeState.originalDuration) {
-            dragState.isSaving = true;
-            showLoading(true);
-            
-            try {
-                const updatedData = { ...resizeState.bookingData, duration: newDuration };
-                await db.collection('appointments').doc(resizeState.bookingId).set(updatedData);
-                showToast(`Duration updated to ${newDuration} hour${newDuration === 1 ? '' : 's'}`, 'success');
-            } catch (error) {
-                console.error("Resize error:", error);
-                showToast("Failed to update duration: " + error.message, "error");
-                // Force re-render to revert visual state
-                renderGrid();
-            } finally {
-                dragState.isSaving = false;
-                showLoading(false);
-            }
-        }
+        const newDuration = resizeState.currentDuration;
+        const bookingId = resizeState.bookingId;
+        const bookingData = resizeState.bookingData;
+        const originalDuration = resizeState.originalDuration;
         
         // Reset state
         resizeState = {
             active: false,
             bookingId: null,
             bookingData: null,
-            slotElement: null,
+            bookingStart: 0,
             col: null,
             res: null,
             activeWeekKey: null,
@@ -1453,10 +1698,28 @@ const firebaseConfig = {
             currentDuration: 0,
             minDuration: 0.5,
             maxDuration: 0,
-            bookingStart: 0,
-            previewElement: null,
+            originalRect: null,
+            overlayElement: null,
             tooltipElement: null
         };
+        
+        // Only save if duration actually changed
+        if (newDuration !== originalDuration) {
+            dragState.isSaving = true;
+            showLoading(true);
+            
+            try {
+                const updatedData = { ...bookingData, duration: newDuration };
+                await db.collection('appointments').doc(bookingId).set(updatedData);
+                showToast(`Duration updated to ${newDuration} hour${newDuration === 1 ? '' : 's'}`, 'success');
+            } catch (error) {
+                console.error("Resize error:", error);
+                showToast("Failed to update duration: " + error.message, "error");
+            } finally {
+                dragState.isSaving = false;
+                showLoading(false);
+            }
+        }
     }
 
     async function executeMoveBooking() {
