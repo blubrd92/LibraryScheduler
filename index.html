@@ -815,7 +815,7 @@ const firebaseConfig = {
             const d = String(currentWeekStart.getDate()).padStart(2, '0');
             document.getElementById('datePicker').value = `${y}-${m}-${d}`;
         }
-        document.getElementById('headerResourceName').innerHTML = res.name;
+        document.getElementById('headerResourceName').innerText = res.name;
     }
 
     function renderGrid() {
@@ -915,14 +915,14 @@ const firebaseConfig = {
                             slot.className = `slot ${rowClass} booked-head ${colorClass}`;
                             if(booking.data.hasStaff) slot.classList.add('with-staff');
                             
-                            slot.innerHTML = `<span class="slot-name">${booking.data.name} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
+                            slot.innerHTML = `<span class="slot-name">${escapeHtml(booking.data.name)} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
                             
                             if(booking.data.hasStaff) {
-                                slot.innerHTML += `<span class="slot-staff">w/ ${booking.data.staffName}</span>`;
+                                slot.innerHTML += `<span class="slot-staff">w/ ${escapeHtml(booking.data.staffName)}</span>`;
                             }
                             
                             if(booking.data.showNotes && booking.data.notes) {
-                                slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${booking.data.notes}</span>`;
+                                slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${escapeHtml(booking.data.notes)}</span>`;
                             }
 
                             // Add resize handle
@@ -997,8 +997,8 @@ const firebaseConfig = {
             return;
         }
         
-        // Block if a move is already in progress or resize is active
-        if (dragState.isSaving || resizeState.active) {
+        // Block if a move is already in progress, resize is active, or selection is active
+        if (dragState.isSaving || resizeState.active || selectionState.active) {
             e.preventDefault();
             return;
         }
@@ -2048,10 +2048,19 @@ const firebaseConfig = {
     function highlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
     function unhighlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
     
-    function deleteBooking() { 
+    async function deleteBooking() { 
         const slotId = document.getElementById('slotId').value;
         if(!allBookings[slotId]) return closeModal('bookingModal');
-        if(confirm("Delete booking?")) { showLoading(true); db.collection('appointments').doc(slotId).delete().then(()=>closeModal('bookingModal')); showLoading(false); }
+        if(confirm("Delete booking?")) { 
+            showLoading(true); 
+            try {
+                await db.collection('appointments').doc(slotId).delete();
+                closeModal('bookingModal');
+            } catch(e) {
+                showToast("Error deleting: " + e.message, "error");
+            }
+            showLoading(false); 
+        }
     }
     
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -2066,6 +2075,10 @@ const firebaseConfig = {
         return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
     }
     function formatDateShort(d) { return (d.getMonth()+1) + "/" + d.getDate(); }
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
     function formatTime(val) {
         const h = Math.floor(val);
         const m = (val % 1 === 0) ? '00' : '30';
