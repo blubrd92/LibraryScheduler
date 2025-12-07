@@ -229,6 +229,20 @@
         .slot.booked-head { cursor: grab; }
         .slot.booked-head:active { cursor: grabbing; }
         .slot.dragging { opacity: 0.5; cursor: grabbing; }
+        
+        /* Floating drag tooltip (used when dragging over booked slots) */
+        .drag-tooltip {
+            position: fixed;
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 1001;
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
         .slot.drag-over-valid { 
             background-color: rgba(39, 174, 96, 0.3) !important; 
             box-shadow: inset 0 0 0 2px var(--success);
@@ -237,17 +251,25 @@
             background-color: rgba(192, 57, 43, 0.3) !important; 
             box-shadow: inset 0 0 0 2px var(--danger);
         }
-        /* Keep tooltip visible during drag */
-        .slot.drag-over-valid::after,
-        .slot.drag-over-invalid::after {
+        /* Keep tooltip visible during drag on empty slots */
+        .slot:not(.booked-head).drag-over-valid::after,
+        .slot:not(.booked-head).drag-over-invalid::after {
             content: attr(data-time);
             position: absolute;
-            bottom: 100%; left: 50%; transform: translateX(-50%);
-            background: #333; color: #fff; padding: 4px 8px; border-radius: 4px;
-            font-size: 0.85em; white-space: nowrap; pointer-events: none; z-index: 20;
+            bottom: 100%; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: #333; 
+            color: #fff; 
+            padding: 4px 8px; 
+            border-radius: 4px;
+            font-size: 0.85em; 
+            white-space: nowrap; 
+            pointer-events: none; 
+            z-index: 20;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        /* Allow tooltip to overflow on booked slots during drag */
+        /* Allow overflow on booked slots during drag for visual feedback */
         .slot.booked-head.drag-over-valid,
         .slot.booked-head.drag-over-invalid {
             overflow: visible;
@@ -463,6 +485,43 @@
     </div>
 </div>
 
+<!-- Resize Confirmation Modal -->
+<div id="resizeModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Confirm Duration Change</div>
+        <input type="hidden" id="resizeBookingId">
+        <input type="hidden" id="resizeNewDuration">
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">Patron:</span>
+                <span class="move-detail-value" id="resizePatronName"></span>
+            </div>
+        </div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">From:</span>
+                <span class="move-detail-value" id="resizeFromDuration"></span>
+            </div>
+        </div>
+        
+        <div class="move-arrow">↓</div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">To:</span>
+                <span class="move-detail-value" id="resizeToDuration"></span>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button onclick="cancelResize()">Cancel</button>
+            <button class="btn-success" onclick="executeResize()">Update Duration</button>
+        </div>
+    </div>
+</div>
+
 <div id="settingsOverlay" class="modal">
     <div class="settings-box">
         <div class="settings-header">
@@ -594,7 +653,8 @@ const firebaseConfig = {
         sourceId: null,
         sourceData: null,
         isDragging: false,
-        isSaving: false
+        isSaving: false,
+        tooltipElement: null
     };
 
     // DRAG-TO-CREATE SELECTION STATE
@@ -1021,6 +1081,12 @@ const firebaseConfig = {
         dragState.isDragging = false;
         e.target.classList.remove('dragging');
         
+        // Clean up floating tooltip
+        if (dragState.tooltipElement) {
+            dragState.tooltipElement.remove();
+            dragState.tooltipElement = null;
+        }
+        
         // Clean up any lingering drag-over classes and data-time attributes
         document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
             el.classList.remove('drag-over-valid', 'drag-over-invalid');
@@ -1064,6 +1130,11 @@ const firebaseConfig = {
         // Clean up data-time if it was set on a booked slot during drag
         if (el.classList.contains('booked-head')) {
             el.removeAttribute('data-time');
+            // Remove floating tooltip when leaving booked slot
+            if (dragState.tooltipElement) {
+                dragState.tooltipElement.remove();
+                dragState.tooltipElement = null;
+            }
         }
     }
 
@@ -1087,8 +1158,18 @@ const firebaseConfig = {
         // Calculate target time based on mouse position
         const targetTime = getTimeSlotFromPosition(e, booking.start, booking.data.duration);
         
-        // Set data-time for tooltip display
-        slot.setAttribute('data-time', `${formatTime(targetTime)} - ${formatTime(targetTime + 0.5)}`);
+        // Create or update floating tooltip
+        const tooltipText = `${formatTime(targetTime)} - ${formatTime(targetTime + 0.5)}`;
+        if (!dragState.tooltipElement) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'drag-tooltip';
+            document.body.appendChild(tooltip);
+            dragState.tooltipElement = tooltip;
+        }
+        dragState.tooltipElement.innerText = tooltipText;
+        const rect = slot.getBoundingClientRect();
+        dragState.tooltipElement.style.left = (rect.left + rect.width / 2 - dragState.tooltipElement.offsetWidth / 2) + 'px';
+        dragState.tooltipElement.style.top = (rect.top - 35) + 'px';
         
         // If dragging over a different booking, always invalid
         if (booking.id !== dragState.sourceId) {
@@ -1126,6 +1207,12 @@ const firebaseConfig = {
         const slot = e.currentTarget;
         slot.classList.remove('drag-over-valid', 'drag-over-invalid');
         slot.removeAttribute('data-time');
+        
+        // Clean up floating tooltip
+        if (dragState.tooltipElement) {
+            dragState.tooltipElement.remove();
+            dragState.tooltipElement = null;
+        }
         
         if (!dragState.isDragging || !dragState.sourceId) return;
         
@@ -1687,9 +1774,18 @@ const firebaseConfig = {
         }
         
         const newDuration = resizeState.currentDuration;
-        const bookingId = resizeState.bookingId;
-        const bookingData = resizeState.bookingData;
         const originalDuration = resizeState.originalDuration;
+        
+        // Only show confirmation if duration actually changed
+        if (newDuration !== originalDuration) {
+            showResizeConfirmation(
+                resizeState.bookingId,
+                resizeState.bookingData,
+                resizeState.bookingStart,
+                originalDuration,
+                newDuration
+            );
+        }
         
         // Reset state
         resizeState = {
@@ -1710,23 +1806,58 @@ const firebaseConfig = {
             overlayElement: null,
             tooltipElement: null
         };
+    }
+
+    function showResizeConfirmation(bookingId, bookingData, bookingStart, oldDuration, newDuration) {
+        document.getElementById('resizeBookingId').value = bookingId;
+        document.getElementById('resizeNewDuration').value = newDuration;
+        document.getElementById('resizePatronName').innerText = bookingData.name;
         
-        // Only save if duration actually changed
-        if (newDuration !== originalDuration) {
-            dragState.isSaving = true;
-            showLoading(true);
-            
-            try {
-                const updatedData = { ...bookingData, duration: newDuration };
-                await db.collection('appointments').doc(bookingId).set(updatedData);
-                showToast(`Duration updated to ${newDuration} hour${newDuration === 1 ? '' : 's'}`, 'success');
-            } catch (error) {
-                console.error("Resize error:", error);
-                showToast("Failed to update duration: " + error.message, "error");
-            } finally {
-                dragState.isSaving = false;
-                showLoading(false);
-            }
+        const oldEnd = bookingStart + oldDuration;
+        const newEnd = bookingStart + newDuration;
+        
+        document.getElementById('resizeFromDuration').innerText = 
+            `${formatTime(bookingStart)} - ${formatTime(oldEnd)} (${oldDuration} hour${oldDuration === 1 ? '' : 's'})`;
+        document.getElementById('resizeToDuration').innerText = 
+            `${formatTime(bookingStart)} - ${formatTime(newEnd)} (${newDuration} hour${newDuration === 1 ? '' : 's'})`;
+        
+        // Store booking data for the execute function
+        document.getElementById('resizeModal').dataset.bookingData = JSON.stringify(bookingData);
+        
+        document.getElementById('resizeModal').style.display = 'flex';
+    }
+
+    function cancelResize() {
+        closeModal('resizeModal');
+    }
+
+    async function executeResize() {
+        if (dragState.isSaving) return;
+        
+        const bookingId = document.getElementById('resizeBookingId').value;
+        const newDuration = parseFloat(document.getElementById('resizeNewDuration').value);
+        const bookingData = JSON.parse(document.getElementById('resizeModal').dataset.bookingData);
+        
+        if (!bookingId || !bookingData) {
+            showToast("Invalid booking data.", "error");
+            closeModal('resizeModal');
+            return;
+        }
+        
+        dragState.isSaving = true;
+        showLoading(true);
+        closeModal('resizeModal');
+        
+        try {
+            const updatedData = { ...bookingData, duration: newDuration };
+            await db.collection('appointments').doc(bookingId).set(updatedData);
+            showToast(`Duration updated to ${newDuration} hour${newDuration === 1 ? '' : 's'}`, 'success');
+        } catch (error) {
+            console.error("Resize error:", error);
+            showToast("Failed to update duration: " + error.message, "error");
+        } finally {
+            dragState.isSaving = false;
+            showLoading(false);
         }
     }
 
