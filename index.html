@@ -348,6 +348,78 @@
             pointer-events: none;
         }
 
+        /* Closure Date Column Styles */
+        .header-cell.closed-day {
+            background: #7f8c8d;
+        }
+        .closure-reason {
+            font-size: 0.75em;
+            font-weight: normal;
+            opacity: 0.9;
+            margin-top: 4px;
+            font-style: italic;
+        }
+        .slot.closed.closure-day {
+            background-color: #b0b0b0 !important;
+        }
+
+        /* Closure Date Admin Styles */
+        .closure-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .closure-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        .closure-item:last-child {
+            border-bottom: none;
+        }
+        .closure-item-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .closure-item-date {
+            font-weight: bold;
+        }
+        .closure-item-reason {
+            font-size: 0.85em;
+            color: #666;
+        }
+        .closure-item button {
+            padding: 4px 8px;
+            font-size: 0.8em;
+        }
+        .closure-empty {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
+        }
+        .closure-add-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .closure-add-row input[type="date"] {
+            flex: 0 0 150px;
+        }
+        .closure-add-row input[type="text"] {
+            flex: 1;
+        }
+        .closure-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
         /* Move Confirmation Modal Styles */
         .move-detail { 
             background: #f8f9fa; 
@@ -536,6 +608,26 @@
     </div>
 </div>
 
+<!-- Import Closures Modal -->
+<div id="importClosuresModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Import Closure Dates</div>
+        <p style="margin-bottom: 15px;">Would you like to import closure dates from an existing resource?</p>
+        
+        <div class="form-group">
+            <label>Import From:</label>
+            <select id="importClosuresSource">
+                <option value="">-- No, start fresh --</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button class="btn-success" onclick="confirmImportClosures()">Create Resource</button>
+            <button onclick="cancelImportClosures()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <div id="settingsOverlay" class="modal">
     <div class="settings-box">
         <div class="settings-header">
@@ -601,6 +693,25 @@
                     </div>
                 </div>
 
+                <!-- Closure Dates Section -->
+                <div class="form-group" style="background: #fce4ec; padding: 10px; border-radius: 4px; border: 1px solid #f8bbd9;">
+                    <label style="font-weight:bold; color:#c2185b; margin-bottom:10px; display:block;">📅 Closure Dates (Holidays/Closures)</label>
+                    
+                    <div class="closure-add-row">
+                        <input type="date" id="newClosureDate">
+                        <input type="text" id="newClosureReason" placeholder="Reason (e.g. Christmas Day)">
+                        <button class="btn-success" onclick="addClosureDate()">Add</button>
+                    </div>
+                    
+                    <div id="closureList" class="closure-list">
+                        <div class="closure-empty">No closure dates set</div>
+                    </div>
+                    
+                    <div class="closure-actions">
+                        <button onclick="applyClosuresToAllResources()" style="font-size:0.85em;">Apply to All Resources</button>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <h4 style="margin: 15px 0 5px 0; border-bottom: 2px solid #eee; padding-bottom:5px;">Operating Hours (24h Format)</h4>
                     <div class="day-config-grid" id="daysConfigContainer"></div>
@@ -661,6 +772,9 @@ const firebaseConfig = {
     let dailyMap = []; 
     let bookingColorMap = {};
     let activeListenerUnsub = null;
+
+    // Pending new resource data (for import closures flow)
+    let pendingNewResource = null;
 
     // DRAG-AND-DROP STATE
     let dragState = {
@@ -760,7 +874,7 @@ const firebaseConfig = {
             if (doc.exists) {
                 resources = doc.data().list || [];
             } else {
-                resources = [{ id: 'res_default', name: 'General Area', viewMode: 'week', hours: DEFAULT_HOURS }];
+                resources = [{ id: 'res_default', name: 'General Area', viewMode: 'week', hours: DEFAULT_HOURS, closureDates: [] }];
                 db.collection('system').doc('resources').set({ list: resources });
             }
             handleResourceUpdate();
@@ -895,6 +1009,22 @@ const firebaseConfig = {
         document.getElementById('headerResourceName').innerText = res.name;
     }
 
+    // Helper to check if a date is a closure date for the resource
+    function getClosureReason(res, date) {
+        if (!res.closureDates || !Array.isArray(res.closureDates)) return null;
+        const dateStr = formatDateISO(date);
+        const closure = res.closureDates.find(c => c.date === dateStr);
+        return closure ? closure.reason : null;
+    }
+
+    // Format date as YYYY-MM-DD for comparison
+    function formatDateISO(d) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     function renderGrid() {
         const container = document.getElementById('gridContainer');
         container.innerHTML = '';
@@ -920,7 +1050,15 @@ const firebaseConfig = {
         }
 
         container.appendChild(createDiv('header-cell', 'Time'));
-        columns.forEach(col => { container.appendChild(createDiv('header-cell', col.header)); });
+        columns.forEach(col => { 
+            const closureReason = getClosureReason(res, col.date);
+            const headerDiv = createDiv('header-cell', col.header);
+            if (closureReason) {
+                headerDiv.classList.add('closed-day');
+                headerDiv.innerHTML += `<span class="closure-reason">${escapeHtml(closureReason)}</span>`;
+            }
+            container.appendChild(headerDiv); 
+        });
 
         const activeWeekKey = getWeekKey(isDayView ? currentDayDate : currentWeekStart);
         let gridBookings = [];
@@ -967,12 +1105,17 @@ const firebaseConfig = {
             container.appendChild(createDiv(`time-cell ${rowClass}`, displayTime));
 
             columns.forEach(col => {
+                const closureReason = getClosureReason(res, col.date);
                 const dayStart = res.hours[col.dayIndex * 2];
                 const dayEnd = res.hours[(col.dayIndex * 2) + 1];
                 const slot = document.createElement('div');
                 slot.className = `slot ${rowClass}`;
                 
-                if (timeVal < dayStart || timeVal >= dayEnd || dayStart === dayEnd) {
+                // Check for closure date first (entire day closed)
+                if (closureReason) {
+                    slot.classList.add('closed', 'closure-day');
+                    container.appendChild(slot);
+                } else if (timeVal < dayStart || timeVal >= dayEnd || dayStart === dayEnd) {
                     slot.classList.add('closed');
                     container.appendChild(slot);
                 } else {
@@ -1399,6 +1542,14 @@ const firebaseConfig = {
         // Check week boundaries
         if (sourceWeekKey !== targetWeekKey) {
             return { valid: false, reason: "Cannot move booking to a different week." };
+        }
+        
+        // Check for closure date
+        const targetDate = new Date(currentWeekStart);
+        targetDate.setDate(targetDate.getDate() + targetDay);
+        const closureReason = getClosureReason(res, targetDate);
+        if (closureReason) {
+            return { valid: false, reason: `Closed: ${closureReason}` };
         }
         
         // Get operating hours for target day
@@ -2156,11 +2307,10 @@ const firebaseConfig = {
         document.getElementById('editSubRooms').value = r.subRooms || '';
         document.getElementById('editDefaultShowNotes').checked = r.defaultShowNotes || false;
         
-        // --- NEW: Load Sidebar Settings ---
+        // Load Sidebar Settings
         document.getElementById('editEnableSidebar').checked = r.enableSidebar || false;
         document.getElementById('editSidebarText').value = r.sidebarText || '';
-        toggleSidebarConfig(); // show/hide the text box
-        // ----------------------------------
+        toggleSidebarConfig();
 
         toggleSubRoomInput();
         const container = document.getElementById('daysConfigContainer');
@@ -2169,38 +2319,225 @@ const firebaseConfig = {
             const start = r.hours[i*2];
             const end = r.hours[(i*2)+1];
             container.innerHTML += `<div class="day-box"><strong>${d}</strong><input type="number" id="s_${i}" value="${start}" min="0" max="24" step="0.5"><input type="number" id="e_${i}" value="${end}" min="0" max="24" step="0.5"></div>`;
-            });
+        });
+        
+        // Load Closure Dates
+        renderClosureList(r);
     }
     
     function toggleSubRoomInput() { const mode = document.getElementById('editViewMode').value; const container = document.getElementById('subRoomConfig'); if (mode === 'day') { container.classList.remove('hidden'); } else { container.classList.add('hidden'); } }
 
-    // --- NEW: Toggle Sidebar Input Helper ---
     function toggleSidebarConfig() {
         const isEnabled = document.getElementById('editEnableSidebar').checked;
         const container = document.getElementById('sidebarTextConfig');
         if (isEnabled) container.classList.remove('hidden');
         else container.classList.add('hidden');
     }
-    
+
+    // --- CLOSURE DATE MANAGEMENT ---
+    function renderClosureList(res) {
+        const container = document.getElementById('closureList');
+        const closures = res.closureDates || [];
+        
+        if (closures.length === 0) {
+            container.innerHTML = '<div class="closure-empty">No closure dates set</div>';
+            return;
+        }
+        
+        // Sort by date
+        const sorted = [...closures].sort((a, b) => a.date.localeCompare(b.date));
+        
+        container.innerHTML = sorted.map((c, idx) => {
+            const dateObj = new Date(c.date + 'T00:00');
+            const formatted = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            return `
+                <div class="closure-item">
+                    <div class="closure-item-info">
+                        <span class="closure-item-date">${formatted}</span>
+                        <span class="closure-item-reason">${escapeHtml(c.reason || 'No reason specified')}</span>
+                    </div>
+                    <button class="btn-danger" onclick="removeClosureDate('${c.date}')">Remove</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function addClosureDate() {
+        const dateInput = document.getElementById('newClosureDate');
+        const reasonInput = document.getElementById('newClosureReason');
+        
+        const dateVal = dateInput.value;
+        const reason = reasonInput.value.trim();
+        
+        if (!dateVal) {
+            showToast("Please select a date.", "error");
+            return;
+        }
+        
+        const editId = document.getElementById('settingResSelect').value;
+        const r = resources.find(x => x.id === editId);
+        if (!r) return;
+        
+        // Initialize array if needed
+        if (!r.closureDates) r.closureDates = [];
+        
+        // Check for duplicate
+        if (r.closureDates.some(c => c.date === dateVal)) {
+            showToast("This date is already set as a closure.", "error");
+            return;
+        }
+        
+        r.closureDates.push({ date: dateVal, reason: reason || 'Closed' });
+        
+        // Clear inputs
+        dateInput.value = '';
+        reasonInput.value = '';
+        
+        // Re-render
+        renderClosureList(r);
+        showToast("Closure date added. Remember to save changes.", "success");
+    }
+
+    function removeClosureDate(dateStr) {
+        const editId = document.getElementById('settingResSelect').value;
+        const r = resources.find(x => x.id === editId);
+        if (!r || !r.closureDates) return;
+        
+        r.closureDates = r.closureDates.filter(c => c.date !== dateStr);
+        renderClosureList(r);
+        showToast("Closure date removed. Remember to save changes.", "success");
+    }
+
+    async function applyClosuresToAllResources() {
+        const editId = document.getElementById('settingResSelect').value;
+        const sourceRes = resources.find(x => x.id === editId);
+        if (!sourceRes) return;
+        
+        const closures = sourceRes.closureDates || [];
+        if (closures.length === 0) {
+            showToast("No closure dates to apply.", "error");
+            return;
+        }
+        
+        if (!confirm(`Apply ${closures.length} closure date(s) to ALL other resources? This will merge with their existing closures.`)) {
+            return;
+        }
+        
+        // Apply to all other resources
+        resources.forEach(r => {
+            if (r.id === editId) return; // Skip source
+            
+            if (!r.closureDates) r.closureDates = [];
+            
+            closures.forEach(c => {
+                // Only add if not already present
+                if (!r.closureDates.some(existing => existing.date === c.date)) {
+                    r.closureDates.push({ ...c });
+                }
+            });
+        });
+        
+        // Save all resources
+        showLoading(true);
+        try {
+            await db.collection('system').doc('resources').set({ list: resources });
+            showToast(`Closure dates applied to ${resources.length - 1} other resource(s)!`, "success");
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+        showLoading(false);
+    }
+
+    // --- NEW RESOURCE WITH IMPORT OPTION ---
     async function addNewResource() {
         const name = prompt("Name for new resource?");
         if(!name) return;
+        
+        // Check if any existing resources have closure dates
+        const resourcesWithClosures = resources.filter(r => r.closureDates && r.closureDates.length > 0);
+        
+        if (resourcesWithClosures.length > 0) {
+            // Show import modal
+            pendingNewResource = { 
+                id: 'res-' + Date.now(), 
+                name: name, 
+                viewMode: 'week', 
+                hasStaffField: false, 
+                defaultShowNotes: false, 
+                enableSidebar: false, 
+                sidebarText: "",
+                maxDuration: 2, 
+                hours: [...DEFAULT_HOURS],
+                closureDates: []
+            };
+            
+            // Populate import dropdown
+            const importSelect = document.getElementById('importClosuresSource');
+            importSelect.innerHTML = '<option value="">-- No, start fresh --</option>';
+            resourcesWithClosures.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.id;
+                opt.innerText = `${r.name} (${r.closureDates.length} closure dates)`;
+                importSelect.appendChild(opt);
+            });
+            
+            document.getElementById('importClosuresModal').style.display = 'flex';
+        } else {
+            // No closures to import, create directly
+            showLoading(true);
+            const newRes = { 
+                id: 'res-' + Date.now(), 
+                name: name, 
+                viewMode: 'week', 
+                hasStaffField: false, 
+                defaultShowNotes: false, 
+                enableSidebar: false, 
+                sidebarText: "",
+                maxDuration: 2, 
+                hours: [...DEFAULT_HOURS],
+                closureDates: []
+            };
+            try { 
+                await db.collection('system').doc('resources').set({ list: [...resources, newRes] }); 
+                pendingSelectionId = newRes.id; 
+            } 
+            catch (e) { showToast("Error: " + e.message, "error"); }
+            showLoading(false);
+        }
+    }
+
+    async function confirmImportClosures() {
+        if (!pendingNewResource) return;
+        
+        const importFromId = document.getElementById('importClosuresSource').value;
+        
+        if (importFromId) {
+            const sourceRes = resources.find(r => r.id === importFromId);
+            if (sourceRes && sourceRes.closureDates) {
+                pendingNewResource.closureDates = [...sourceRes.closureDates];
+            }
+        }
+        
         showLoading(true);
-        // Added defaults for sidebar
-        const newRes = { 
-            id: 'res-' + Date.now(), 
-            name: name, 
-            viewMode: 'week', 
-            hasStaffField: false, 
-            defaultShowNotes: false, 
-            enableSidebar: false, 
-            sidebarText: "",
-            maxDuration: 2, 
-            hours: [...DEFAULT_HOURS] 
-        };
-        try { await db.collection('system').doc('resources').set({ list: [...resources, newRes] }); pendingSelectionId = newRes.id; } 
+        closeModal('importClosuresModal');
+        
+        try { 
+            await db.collection('system').doc('resources').set({ list: [...resources, pendingNewResource] }); 
+            pendingSelectionId = pendingNewResource.id;
+            const importCount = pendingNewResource.closureDates.length;
+            if (importCount > 0) {
+                showToast(`Resource created with ${importCount} imported closure date(s)!`, "success");
+            }
+        } 
         catch (e) { showToast("Error: " + e.message, "error"); }
+        
+        pendingNewResource = null;
         showLoading(false);
+    }
+
+    function cancelImportClosures() {
+        pendingNewResource = null;
+        closeModal('importClosuresModal');
     }
     
     async function deleteResource() {
@@ -2225,9 +2562,12 @@ const firebaseConfig = {
         target.subRooms = document.getElementById('editSubRooms').value;
         target.defaultShowNotes = document.getElementById('editDefaultShowNotes').checked;
 
-        // --- NEW: Save Sidebar Settings ---
+        // Save Sidebar Settings
         target.enableSidebar = document.getElementById('editEnableSidebar').checked;
         target.sidebarText = document.getElementById('editSidebarText').value;
+        
+        // Preserve closure dates from the in-memory resource (already updated by add/remove)
+        target.closureDates = r.closureDates || [];
 
         for(let i=0; i<7; i++) { target.hours[i*2] = parseFloat(document.getElementById(`s_${i}`).value) || 0; target.hours[(i*2)+1] = parseFloat(document.getElementById(`e_${i}`).value) || 0; }
         showLoading(true);
