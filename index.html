@@ -165,6 +165,62 @@
             overflow-wrap: break-word;
         }
         
+        /* Overflow indicator */
+        .booking-float .overflow-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 0.7em;
+            font-weight: 600;
+            background: rgba(0,0,0,0.3);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Popover card on hover */
+        .booking-popover {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 100;
+            max-width: 280px;
+            min-width: 200px;
+            pointer-events: none;
+            font-size: 0.9em;
+            color: #333;
+        }
+        
+        .booking-popover .popover-name {
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-bottom: 4px;
+        }
+        
+        .booking-popover .popover-time {
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .booking-popover .popover-staff {
+            color: #e67e22;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        
+        .booking-popover .popover-notes {
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+            margin-top: 4px;
+            white-space: pre-wrap;
+        }
+        
         .booking-float .resize-handle {
             position: absolute;
             bottom: 0;
@@ -1279,19 +1335,35 @@ const firebaseConfig = {
                     bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
                 }
                 
+                // Add overflow indicator if there's extra content that might be clipped
+                const hasExtraContent = booking.data.hasStaff || booking.data.notes;
+                if (hasExtraContent) {
+                    bookingEl.innerHTML += `<span class="overflow-indicator">Hover for details</span>`;
+                }
+                
                 // Add resize handle
                 const resizeHandle = document.createElement('div');
                 resizeHandle.className = 'resize-handle';
                 resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
                 bookingEl.appendChild(resizeHandle);
                 
-                // Event handlers
-                bookingEl.onmouseenter = () => highlightBooking(booking.id);
-                bookingEl.onmouseleave = () => unhighlightBooking(booking.id);
+                // Event handlers - popover on hover
+                bookingEl.onmouseenter = (e) => {
+                    highlightBooking(booking.id);
+                    showBookingPopover(e, booking);
+                };
+                bookingEl.onmousemove = (e) => {
+                    updatePopoverPosition(e);
+                };
+                bookingEl.onmouseleave = () => {
+                    unhighlightBooking(booking.id);
+                    hideBookingPopover();
+                };
                 
                 bookingEl.onclick = (e) => {
                     if (e.target.classList.contains('resize-handle')) return;
                     if (resizeJustEnded) return;
+                    hideBookingPopover();
                     openBookingModal(booking.id, booking.data, col.subIndex);
                 };
                 
@@ -1327,6 +1399,9 @@ const firebaseConfig = {
             e.preventDefault();
             return;
         }
+        
+        // Hide any open popover
+        hideBookingPopover();
         
         dragState.sourceId = bookingId;
         dragState.sourceData = bookingData;
@@ -2016,6 +2091,9 @@ const firebaseConfig = {
         
         // Block if saving or another operation is active
         if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
+        
+        // Hide any open popover
+        hideBookingPopover();
         
         // Calculate max duration based on closing time and collisions
         const dayEnd = res.hours[(col.dayIndex * 2) + 1];
@@ -2873,6 +2951,61 @@ const firebaseConfig = {
     }
     function highlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
     function unhighlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
+    
+    // Popover for booking details
+    let activePopover = null;
+    
+    function showBookingPopover(e, booking) {
+        hideBookingPopover(); // Clear any existing
+        
+        const popover = document.createElement('div');
+        popover.className = 'booking-popover';
+        
+        let html = `<div class="popover-name">${escapeHtml(booking.data.name)}</div>`;
+        html += `<div class="popover-time">${formatTime(booking.start)} - ${formatTime(booking.end)} (${booking.data.duration}h)</div>`;
+        
+        if (booking.data.hasStaff && booking.data.staffName) {
+            html += `<div class="popover-staff">w/ ${escapeHtml(booking.data.staffName)}</div>`;
+        }
+        
+        if (booking.data.notes) {
+            html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+        }
+        
+        popover.innerHTML = html;
+        document.body.appendChild(popover);
+        activePopover = popover;
+        
+        updatePopoverPosition(e);
+    }
+    
+    function updatePopoverPosition(e) {
+        if (!activePopover) return;
+        
+        const padding = 12;
+        const popoverRect = activePopover.getBoundingClientRect();
+        
+        let left = e.clientX + padding;
+        let top = e.clientY + padding;
+        
+        // Keep within viewport
+        if (left + popoverRect.width > window.innerWidth) {
+            left = e.clientX - popoverRect.width - padding;
+        }
+        if (top + popoverRect.height > window.innerHeight) {
+            top = e.clientY - popoverRect.height - padding;
+        }
+        
+        activePopover.style.left = left + 'px';
+        activePopover.style.top = top + 'px';
+    }
+    
+    function hideBookingPopover() {
+        if (activePopover) {
+            activePopover.remove();
+            activePopover = null;
+        }
+    }
     
     async function deleteBooking() { 
         const slotId = document.getElementById('slotId').value;
