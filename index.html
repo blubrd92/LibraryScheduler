@@ -51,7 +51,7 @@
         /* === UPDATED: LAYOUT WRAPPER === */
         .layout-wrapper {
             display: flex;
-            align-items: flex-start;
+            align-items: stretch;
             gap: 20px;
             height: 75vh; /* Moved height here from grid-container */
         }
@@ -64,7 +64,6 @@
             border: 1px solid var(--border);
             border-radius: 4px;
             padding: 0px 15px;
-            height: 100%;
             overflow-y: auto;
             white-space: normal;
             box-sizing: border-box;
@@ -114,7 +113,7 @@
             border-right: 1px solid #ccc; 
             padding: 2px; 
             font-size: 0.95em; 
-            min-height: 25px; 
+            min-height: 28px; 
             cursor: pointer; 
             position: relative; 
             transition: background 0.1s; 
@@ -351,6 +350,11 @@
 
         /* Closure Date Cell Styles */
         .slot.closed.closure-day {
+            /* Same as regular closed cells */
+        }
+        
+        /* Closure reason overlay - uses CSS grid positioning */
+        .closure-overlay {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -358,7 +362,11 @@
             font-size: 1.1em;
             font-weight: 600;
             color: #555;
-            padding: 5px;
+            padding: 10px;
+            pointer-events: none;
+            z-index: 6;
+            box-sizing: border-box;
+            background: transparent;
         }
 
         /* Closure Date Admin Styles */
@@ -453,7 +461,7 @@
     <div class="login-box">
         <h2>Library Reservations Login</h2>
         <p>Please enter the shared access code.</p>
-        <input type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()">
+        <input type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()" autofocus>
         <button onclick="doLogin()">Unlock Reservations</button>
         <p id="loginError" class="hidden">Incorrect Password</p>
     </div>
@@ -509,10 +517,10 @@
         <div class="form-group" id="staffSection" style="display:none; background: #fff8e1; padding: 10px; border-radius: 4px; border: 1px solid #ffe082;">
             <div class="flex gap">
                 <input type="checkbox" id="bookHasStaff" onchange="toggleStaffInput()" style="width:auto;">
-                <label for="bookHasStaff" style="margin:0; font-weight:normal; cursor:pointer;">Staff Assistance Required?</label>
+                <label for="bookHasStaff" style="margin:0; font-weight:normal; cursor:pointer;">Staff/Volunteer Assistance Required?</label>
             </div>
             <div id="staffInputContainer" class="hidden" style="margin-top: 10px;">
-                <label style="font-size:0.8em; color:#666;">Assigned Staff Member:</label>
+                <label style="font-size:0.8em; color:#666;">Assigned Staff/Volunteer:</label>
                 <input type="text" id="bookStaffName" placeholder="e.g. John">
             </div>
         </div>
@@ -611,19 +619,26 @@
 <!-- Import Closures Modal -->
 <div id="importClosuresModal" class="modal">
     <div class="modal-content">
-        <div class="modal-header">Import Closure Dates</div>
-        <p style="margin-bottom: 15px;">Would you like to import closure dates from an existing resource?</p>
+        <div class="modal-header">Import Settings for New Resource</div>
+        <p style="margin-bottom: 15px;">Would you like to import settings from an existing resource?</p>
         
         <div class="form-group">
-            <label>Import From:</label>
+            <label>Import Closure Dates From:</label>
             <select id="importClosuresSource">
                 <option value="">-- No, start fresh --</option>
             </select>
         </div>
         
-        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button class="btn-success" onclick="confirmImportClosures()">Create Resource</button>
-            <button onclick="cancelImportClosures()">Cancel</button>
+        <div class="form-group">
+            <label>Import Operating Hours From:</label>
+            <select id="importHoursSource">
+                <option value="">-- Use default hours --</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-success" onclick="confirmImportSettings()">Create Resource</button>
+            <button onclick="cancelImportSettings()">Cancel</button>
         </div>
     </div>
 </div>
@@ -717,6 +732,9 @@
                 <div class="form-group">
                     <h4 style="margin: 15px 0 5px 0; border-bottom: 2px solid #eee; padding-bottom:5px;">Operating Hours (24h Format)</h4>
                     <div class="day-config-grid" id="daysConfigContainer"></div>
+                    <div class="closure-actions" style="margin-top: 10px;">
+                        <button onclick="applyHoursToAllResources()" style="font-size:0.85em;">Apply Hours to All Resources</button>
+                    </div>
                 </div>
             </div>
             
@@ -1107,10 +1125,9 @@ const firebaseConfig = {
         if(minH > maxH) { minH = 9; maxH = 17; }
 
         const totalSlots = (maxH - minH) * 2;
-        const middleSlotIndex = Math.floor(totalSlots / 2);
         
-        // Track which columns have already shown their closure reason
-        const closureReasonShown = {};
+        // Track closure columns for overlay creation
+        const closureColumns = {};
         
         for (let i = 0; i < totalSlots; i++) {
             const timeVal = minH + (i * 0.5);
@@ -1131,11 +1148,13 @@ const firebaseConfig = {
                 if (closureReason) {
                     slot.classList.add('closed', 'closure-day');
                     
-                    // Show reason text only in the middle cell of this column
+                    // Track this column for overlay (store column grid position)
                     const colKey = `${col.dayIndex}-${col.subIndex}`;
-                    if (!closureReasonShown[colKey] && i === middleSlotIndex) {
-                        slot.innerText = closureReason;
-                        closureReasonShown[colKey] = true;
+                    if (!closureColumns[colKey]) {
+                        closureColumns[colKey] = {
+                            reason: closureReason,
+                            gridColumn: colIndex + 2 // +2 because grid is 1-indexed and first col is time
+                        };
                     }
                     
                     container.appendChild(slot);
@@ -1233,6 +1252,21 @@ const firebaseConfig = {
                 }
             });
         }
+        
+        // Create closure overlays using grid positioning
+        Object.keys(closureColumns).forEach(colKey => {
+            const closureData = closureColumns[colKey];
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'closure-overlay';
+            overlay.innerText = closureData.reason;
+            
+            // Position using CSS grid
+            overlay.style.gridColumn = closureData.gridColumn;
+            overlay.style.gridRow = `2 / -1`; // From row 2 (after header) to last row
+            
+            container.appendChild(overlay);
+        });
     }
 
     // --- DRAG-AND-DROP HANDLERS ---
@@ -1931,7 +1965,11 @@ const firebaseConfig = {
         const maxDuration = Math.min(maxByClose, maxByResource, maxByCollision);
         
         const rect = slotElement.getBoundingClientRect();
-        const slotHeight = rect.height / (booking.data.duration * 2);
+        
+        // Get accurate slot height by finding an empty slot or time cell
+        const container = document.getElementById('gridContainer');
+        const timeCell = container.querySelector('.time-cell');
+        const slotHeight = timeCell ? timeCell.getBoundingClientRect().height : (rect.height / (booking.data.duration * 2));
         
         resizeState = {
             active: true,
@@ -1958,7 +1996,7 @@ const firebaseConfig = {
         overlay.style.left = rect.left + 'px';
         overlay.style.top = rect.top + 'px';
         overlay.style.width = rect.width + 'px';
-        overlay.style.height = rect.height + 'px';
+        overlay.style.height = (slotHeight * booking.data.duration * 2) + 'px';
         document.body.appendChild(overlay);
         resizeState.overlayElement = overlay;
         
@@ -2528,15 +2566,46 @@ const firebaseConfig = {
         showLoading(false);
     }
 
+    async function applyHoursToAllResources() {
+        const editId = document.getElementById('settingResSelect').value;
+        const sourceRes = resources.find(x => x.id === editId);
+        if (!sourceRes) return;
+        
+        // Get current hours from the form inputs
+        const currentHours = [];
+        for (let i = 0; i < 7; i++) {
+            currentHours[i * 2] = parseFloat(document.getElementById(`s_${i}`).value) || 0;
+            currentHours[(i * 2) + 1] = parseFloat(document.getElementById(`e_${i}`).value) || 0;
+        }
+        
+        if (!confirm(`Apply these operating hours to ALL other resources? This will overwrite their existing hours.`)) {
+            return;
+        }
+        
+        // Apply to all other resources
+        resources.forEach(r => {
+            if (r.id === editId) return; // Skip source
+            r.hours = [...currentHours];
+        });
+        
+        // Save all resources
+        showLoading(true);
+        try {
+            await db.collection('system').doc('resources').set({ list: resources });
+            showToast(`Operating hours applied to ${resources.length - 1} other resource(s)!`, "success");
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+        showLoading(false);
+    }
+
     // --- NEW RESOURCE WITH IMPORT OPTION ---
     async function addNewResource() {
         const name = prompt("Name for new resource?");
         if(!name) return;
         
-        // Check if any existing resources have closure dates
-        const resourcesWithClosures = resources.filter(r => r.closureDates && r.closureDates.length > 0);
-        
-        if (resourcesWithClosures.length > 0) {
+        // If there are existing resources, show import options
+        if (resources.length > 0) {
             // Show import modal
             pendingNewResource = { 
                 id: 'res-' + Date.now(), 
@@ -2551,19 +2620,30 @@ const firebaseConfig = {
                 closureDates: []
             };
             
-            // Populate import dropdown
-            const importSelect = document.getElementById('importClosuresSource');
-            importSelect.innerHTML = '<option value="">-- No, start fresh --</option>';
+            // Populate closure dates dropdown
+            const closuresSelect = document.getElementById('importClosuresSource');
+            closuresSelect.innerHTML = '<option value="">-- No, start fresh --</option>';
+            const resourcesWithClosures = resources.filter(r => r.closureDates && r.closureDates.length > 0);
             resourcesWithClosures.forEach(r => {
                 const opt = document.createElement('option');
                 opt.value = r.id;
                 opt.innerText = `${r.name} (${r.closureDates.length} closure dates)`;
-                importSelect.appendChild(opt);
+                closuresSelect.appendChild(opt);
+            });
+            
+            // Populate hours dropdown
+            const hoursSelect = document.getElementById('importHoursSource');
+            hoursSelect.innerHTML = '<option value="">-- Use default hours --</option>';
+            resources.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.id;
+                opt.innerText = r.name;
+                hoursSelect.appendChild(opt);
             });
             
             document.getElementById('importClosuresModal').style.display = 'flex';
         } else {
-            // No closures to import, create directly
+            // No existing resources, create directly with defaults
             showLoading(true);
             const newRes = { 
                 id: 'res-' + Date.now(), 
@@ -2586,15 +2666,23 @@ const firebaseConfig = {
         }
     }
 
-    async function confirmImportClosures() {
+    async function confirmImportSettings() {
         if (!pendingNewResource) return;
         
-        const importFromId = document.getElementById('importClosuresSource').value;
+        const importClosuresFromId = document.getElementById('importClosuresSource').value;
+        const importHoursFromId = document.getElementById('importHoursSource').value;
         
-        if (importFromId) {
-            const sourceRes = resources.find(r => r.id === importFromId);
+        if (importClosuresFromId) {
+            const sourceRes = resources.find(r => r.id === importClosuresFromId);
             if (sourceRes && sourceRes.closureDates) {
                 pendingNewResource.closureDates = [...sourceRes.closureDates];
+            }
+        }
+        
+        if (importHoursFromId) {
+            const sourceRes = resources.find(r => r.id === importHoursFromId);
+            if (sourceRes && sourceRes.hours) {
+                pendingNewResource.hours = [...sourceRes.hours];
             }
         }
         
@@ -2604,9 +2692,15 @@ const firebaseConfig = {
         try { 
             await db.collection('system').doc('resources').set({ list: [...resources, pendingNewResource] }); 
             pendingSelectionId = pendingNewResource.id;
-            const importCount = pendingNewResource.closureDates.length;
-            if (importCount > 0) {
-                showToast(`Resource created with ${importCount} imported closure date(s)!`, "success");
+            const importedItems = [];
+            if (pendingNewResource.closureDates.length > 0) {
+                importedItems.push(`${pendingNewResource.closureDates.length} closure date(s)`);
+            }
+            if (importHoursFromId) {
+                importedItems.push('operating hours');
+            }
+            if (importedItems.length > 0) {
+                showToast(`Resource created with imported ${importedItems.join(' and ')}!`, "success");
             }
         } 
         catch (e) { showToast("Error: " + e.message, "error"); }
@@ -2615,7 +2709,7 @@ const firebaseConfig = {
         showLoading(false);
     }
 
-    function cancelImportClosures() {
+    function cancelImportSettings() {
         pendingNewResource = null;
         closeModal('importClosuresModal');
     }
