@@ -53,7 +53,7 @@
             display: flex;
             align-items: stretch;
             gap: 20px;
-            height: 82vh; /* Moved height here from grid-container */
+            height: 75vh; /* Moved height here from grid-container */
         }
 
         /* === NEW: SIDEBAR STYLES === */
@@ -75,7 +75,7 @@
 
         /* Grid */
         /* Updated height to 100% to fill the layout-wrapper */
-        .grid-container { display: grid; grid-template-columns: 85px repeat(7, 1fr); border: 1px solid var(--border); height: 100%; overflow-y: auto; position: relative; background: #fff; flex-grow: 1; }
+        .grid-container { display: grid; grid-template-columns: 85px repeat(7, 1fr); grid-auto-rows: 1fr; border: 1px solid var(--border); height: 100%; overflow-y: auto; position: relative; background: #fff; flex-grow: 1; }
         .header-cell { 
             background: var(--primary); 
             color: white; 
@@ -120,9 +120,9 @@
             box-sizing: border-box; 
         }
         
-        .slot:not(.booked-head):not(.booked-body):not(.closed):hover { background-color: #e3f2fd; }
+        .slot:not(.has-booking):not(.booked-body):not(.closed):hover { background-color: #e3f2fd; }
         
-        .slot:not(.booked-head):not(.booked-body):not(.closed):hover::after {
+        .slot:not(.has-booking):not(.booked-body):not(.closed):hover::after {
             content: attr(data-time);
             position: absolute;
             bottom: 100%; left: 50%; transform: translateX(-50%);
@@ -134,24 +134,56 @@
         .slot.closed { background-color: #cccccc !important; border-color: #cccccc; cursor: not-allowed; opacity: 1; pointer-events: none; }
         
         /* Merged Cell Styles */
-        .slot.booked-head { 
+        .slot.booked-body { display: none; } 
+        
+        /* Floating booking elements (absolutely positioned) */
+        .booking-float {
+            position: absolute;
             color: white; 
             border-radius: 4px; 
             padding: 6px 8px; 
             font-weight: 600; 
-            z-index: 2; 
+            z-index: 10; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column; 
             align-items: flex-start;
             justify-content: flex-start; 
-            height: 100%; 
-            overflow: hidden; 
+            overflow: hidden;
+            cursor: grab;
+            box-sizing: border-box;
         }
         
-        .slot.booked-body { display: none; } 
+        .booking-float.with-staff { border-left: 5px solid #f1c40f; }
         
-        .slot.booked-head.with-staff { border-left: 5px solid #f1c40f; } 
+        .booking-float .slot-name,
+        .booking-float .slot-staff,
+        .booking-float .slot-notes {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .booking-float .resize-handle {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            cursor: ns-resize;
+            background: transparent;
+        }
+        
+        .booking-float .resize-handle:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Slots under bookings - subtle indicator */
+        .slot.has-booking {
+            /* Can leave empty or add subtle background */
+        }
         
         .booking-hover-effect {
             opacity: 1 !important;
@@ -226,8 +258,8 @@
         .toast.error { background-color: var(--danger); }
 
         /* Drag-and-Drop Styles */
-        .slot.booked-head { cursor: grab; }
-        .slot.booked-head:active { cursor: grabbing; }
+        .booking-float { cursor: grab; }
+        .booking-float:active { cursor: grabbing; }
         .slot.dragging { opacity: 0.5; cursor: grabbing; }
         
         /* Floating drag tooltip (used when dragging over booked slots) */
@@ -266,8 +298,8 @@
             box-shadow: inset 0 0 0 2px var(--danger);
         }
         /* Keep tooltip visible during drag on empty slots */
-        .slot:not(.booked-head).drag-over-valid::after,
-        .slot:not(.booked-head).drag-over-invalid::after {
+        .slot:not(.has-booking).drag-over-valid::after,
+        .slot:not(.has-booking).drag-over-invalid::after {
             content: attr(data-time);
             position: absolute;
             bottom: 100%; 
@@ -284,8 +316,8 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
         /* Allow overflow on booked slots during drag for visual feedback */
-        .slot.booked-head.drag-over-valid,
-        .slot.booked-head.drag-over-invalid {
+        .booking-float.drag-over-valid,
+        .booking-float.drag-over-invalid {
             overflow: visible;
         }
 
@@ -1127,6 +1159,9 @@ const firebaseConfig = {
         // Track which columns have shown their closure reason
         const closureReasonShown = {};
         
+        // Track slot elements for positioning bookings later
+        const slotElements = {}; // key: "colIndex-slotIndex" -> element
+        
         for (let i = 0; i < totalSlots; i++) {
             const timeVal = minH + (i * 0.5);
             const displayTime = formatTime(timeVal);
@@ -1159,71 +1194,16 @@ const firebaseConfig = {
                     slot.classList.add('closed');
                     container.appendChild(slot);
                 } else {
+                    // Check if this slot is covered by a booking (for visual reference, not content)
                     const booking = gridBookings.find(b => b.dayIndex === col.dayIndex && (b.subIndex === col.subIndex) && timeVal >= b.start && timeVal < b.end);
                     if (booking) {
-                        const colorIndex = bookingColorMap[booking.id];
-                        const colorClass = `bg-color-${colorIndex}`;
+                        slot.classList.add('has-booking');
                         slot.dataset.bid = booking.id;
-                        slot.onmouseenter = () => highlightBooking(booking.id);
-                        slot.onmouseleave = () => unhighlightBooking(booking.id);
-
-                        if (timeVal === booking.start) {
-                            const spanCount = booking.data.duration * 2; 
-                            slot.style.gridRow = `span ${spanCount}`;
-                            slot.style.height = "100%"; 
-                            
-                            slot.className = `slot ${rowClass} booked-head ${colorClass}`;
-                            if(booking.data.hasStaff) slot.classList.add('with-staff');
-                            
-                            slot.innerHTML = `<span class="slot-name">${escapeHtml(booking.data.name)} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
-                            
-                            if(booking.data.hasStaff) {
-                                slot.innerHTML += `<span class="slot-staff">w/ ${escapeHtml(booking.data.staffName)}</span>`;
-                            }
-                            
-                            if(booking.data.showNotes && booking.data.notes) {
-                                slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${escapeHtml(booking.data.notes)}</span>`;
-                            } else if(!booking.data.showNotes && booking.data.notes) {
-                                slot.innerHTML += `<span style="display:block; font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
-                            }
-
-                            // Add resize handle
-                            const resizeHandle = document.createElement('div');
-                            resizeHandle.className = 'resize-handle';
-                            resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, slot);
-                            slot.appendChild(resizeHandle);
-
-                            slot.onclick = (e) => {
-                                // Don't open modal if clicking resize handle or just finished resizing
-                                if (e.target.classList.contains('resize-handle')) return;
-                                if (resizeJustEnded) return;
-                                openBookingModal(booking.id, booking.data, col.subIndex);
-                            };
-                            
-                            // DRAG-AND-DROP: Make booked slots draggable
-                            slot.draggable = true;
-                            slot.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
-                            slot.ondragend = handleDragEnd;
-                            
-                            // DRAG-AND-DROP: Make booked slots drop targets for shifting
-                            slot.dataset.bookingId = booking.id;
-                            slot.dataset.bookingStart = booking.start;
-                            slot.dataset.bookingDuration = booking.data.duration;
-                            slot.dataset.dayIndex = col.dayIndex;
-                            slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
-                            slot.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
-                            slot.ondragleave = handleDragLeave;
-                            slot.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
-                            
-                            container.appendChild(slot);
-                        } else {
-                            return; 
-                        }
                     } else {
+                        // Empty slot - set up for interactions
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
                         
-                        // Click opens modal (but only if not dragging to create or just finished resizing)
                         slot.onclick = (e) => {
                             if (selectionState.active) return;
                             if (resizeJustEnded) return;
@@ -1243,12 +1223,96 @@ const firebaseConfig = {
                         
                         // DRAG-TO-CREATE: mousedown starts selection
                         slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
-                        
-                        container.appendChild(slot);
                     }
+                    
+                    // Store reference to this slot for positioning bookings
+                    slotElements[`${colIndex}-${i}`] = slot;
+                    container.appendChild(slot);
                 }
             });
         }
+        
+        // Now create absolutely positioned booking elements
+        // Use requestAnimationFrame to ensure grid layout is complete
+        requestAnimationFrame(() => {
+            gridBookings.forEach(booking => {
+                const col = columns.find(c => c.dayIndex === booking.dayIndex && c.subIndex === booking.subIndex);
+                if (!col) return;
+                
+                const colIndex = columns.indexOf(col);
+                const startSlotIndex = (booking.start - minH) * 2;
+                const endSlotIndex = startSlotIndex + (booking.data.duration * 2) - 1;
+                
+                const startSlot = slotElements[`${colIndex}-${startSlotIndex}`];
+                const endSlot = slotElements[`${colIndex}-${endSlotIndex}`];
+                
+                if (!startSlot || !endSlot) return;
+                
+                const startRect = startSlot.getBoundingClientRect();
+                const endRect = endSlot.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                
+                const colorIndex = bookingColorMap[booking.id];
+                const colorClass = `bg-color-${colorIndex}`;
+                
+                const bookingEl = document.createElement('div');
+                bookingEl.className = `booking-float ${colorClass}`;
+                if (booking.data.hasStaff) bookingEl.classList.add('with-staff');
+                bookingEl.dataset.bid = booking.id;
+                
+                // Position relative to container
+                bookingEl.style.position = 'absolute';
+                bookingEl.style.left = (startRect.left - containerRect.left + container.scrollLeft) + 'px';
+                bookingEl.style.top = (startRect.top - containerRect.top + container.scrollTop) + 'px';
+                bookingEl.style.width = startRect.width + 'px';
+                bookingEl.style.height = (endRect.bottom - startRect.top) + 'px';
+                
+                // Content
+                bookingEl.innerHTML = `<span class="slot-name">${escapeHtml(booking.data.name)} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
+                
+                if (booking.data.hasStaff) {
+                    bookingEl.innerHTML += `<span class="slot-staff">w/ ${escapeHtml(booking.data.staffName)}</span>`;
+                }
+                
+                if (booking.data.showNotes && booking.data.notes) {
+                    bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${escapeHtml(booking.data.notes)}</span>`;
+                } else if (!booking.data.showNotes && booking.data.notes) {
+                    bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
+                }
+                
+                // Add resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
+                bookingEl.appendChild(resizeHandle);
+                
+                // Event handlers
+                bookingEl.onmouseenter = () => highlightBooking(booking.id);
+                bookingEl.onmouseleave = () => unhighlightBooking(booking.id);
+                
+                bookingEl.onclick = (e) => {
+                    if (e.target.classList.contains('resize-handle')) return;
+                    if (resizeJustEnded) return;
+                    openBookingModal(booking.id, booking.data, col.subIndex);
+                };
+                
+                // DRAG-AND-DROP
+                bookingEl.draggable = true;
+                bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
+                bookingEl.ondragend = handleDragEnd;
+                
+                bookingEl.dataset.bookingId = booking.id;
+                bookingEl.dataset.bookingStart = booking.start;
+                bookingEl.dataset.bookingDuration = booking.data.duration;
+                bookingEl.dataset.dayIndex = col.dayIndex;
+                bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
+                bookingEl.ondragleave = handleDragLeave;
+                bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                
+                container.appendChild(bookingEl);
+            });
+        });
     }
 
     // --- DRAG-AND-DROP HANDLERS ---
@@ -1303,7 +1367,7 @@ const firebaseConfig = {
         // Clean up any lingering drag-over classes and data-time attributes
         document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
             el.classList.remove('drag-over-valid', 'drag-over-invalid');
-            if (el.classList.contains('booked-head')) {
+            if (el.classList.contains('booking-float')) {
                 el.removeAttribute('data-time');
             }
         });
@@ -1347,7 +1411,7 @@ const firebaseConfig = {
         const el = e.currentTarget;
         el.classList.remove('drag-over-valid', 'drag-over-invalid');
         // Clean up data-time if it was set on a booked slot during drag
-        if (el.classList.contains('booked-head')) {
+        if (el.classList.contains('booking-float')) {
             el.removeAttribute('data-time');
             // Remove floating tooltip and highlight when leaving booked slot
             if (dragState.tooltipElement) {
@@ -1731,13 +1795,13 @@ const firebaseConfig = {
         
         const rect = slotElement.getBoundingClientRect();
         
-        // Get accurate slot height from time cells (consistent measurement)
+        // Build array of time cell positions for accurate slot detection
         const container = document.getElementById('gridContainer');
-        const timeCells = container.querySelectorAll('.time-cell');
-        let slotHeight = rect.height; // fallback
-        if (timeCells.length > 0) {
-            slotHeight = timeCells[0].getBoundingClientRect().height;
-        }
+        const timeCells = Array.from(container.querySelectorAll('.time-cell'));
+        const slotPositions = timeCells.map(cell => {
+            const cellRect = cell.getBoundingClientRect();
+            return { top: cellRect.top, bottom: cellRect.bottom, height: cellRect.height };
+        });
         
         selectionState = {
             active: true,
@@ -1746,7 +1810,8 @@ const firebaseConfig = {
             startDayIndex: col.dayIndex,
             subIndex: col.subIndex,
             startY: e.clientY,
-            slotHeight: slotHeight,
+            startSlotIndex: 0, // which slot we started in
+            slotPositions: slotPositions,
             maxDuration: maxDuration,
             currentDuration: 0.5,
             res: res,
@@ -1756,13 +1821,21 @@ const firebaseConfig = {
             tooltipElement: null
         };
         
-        // Create overlay using time cell height for accuracy
+        // Find which slot index we're starting in
+        for (let i = 0; i < slotPositions.length; i++) {
+            if (e.clientY >= slotPositions[i].top && e.clientY < slotPositions[i].bottom) {
+                selectionState.startSlotIndex = i;
+                break;
+            }
+        }
+        
+        // Create overlay
         const overlay = document.createElement('div');
         overlay.className = 'selection-overlay';
         overlay.style.left = rect.left + 'px';
-        overlay.style.top = rect.top + 'px';
+        overlay.style.top = slotPositions[selectionState.startSlotIndex].top + 'px';
         overlay.style.width = rect.width + 'px';
-        overlay.style.height = slotHeight + 'px';
+        overlay.style.height = slotPositions[selectionState.startSlotIndex].height + 'px';
         document.body.appendChild(overlay);
         selectionState.overlayElement = overlay;
         
@@ -1782,16 +1855,38 @@ const firebaseConfig = {
     function doSelection(e) {
         if (!selectionState.active) return;
         
-        const deltaY = e.clientY - selectionState.startY;
-        const slotsDelta = Math.floor(deltaY / selectionState.slotHeight);
-        let newDuration = 0.5 + (slotsDelta * 0.5);
+        const positions = selectionState.slotPositions;
+        const startIdx = selectionState.startSlotIndex;
+        
+        // Find which slot the mouse is currently over
+        let currentSlotIndex = startIdx;
+        for (let i = startIdx; i < positions.length; i++) {
+            if (e.clientY >= positions[i].top && e.clientY < positions[i].bottom) {
+                currentSlotIndex = i;
+                break;
+            }
+            // If mouse is below this slot, keep going
+            if (e.clientY >= positions[i].bottom) {
+                currentSlotIndex = i;
+            }
+        }
+        
+        // Calculate duration based on slots covered
+        const slotsCovered = currentSlotIndex - startIdx + 1;
+        let newDuration = slotsCovered * 0.5;
         newDuration = Math.max(0.5, Math.min(selectionState.maxDuration, newDuration));
         
         selectionState.currentDuration = newDuration;
         
-        if (selectionState.overlayElement) {
-            const newHeight = selectionState.slotHeight * (newDuration * 2);
-            selectionState.overlayElement.style.height = newHeight + 'px';
+        // Update overlay to span from start slot to current slot
+        if (selectionState.overlayElement && positions[startIdx]) {
+            const endIdx = startIdx + (newDuration * 2) - 1;
+            const clampedEndIdx = Math.min(endIdx, positions.length - 1);
+            const startTop = positions[startIdx].top;
+            const endBottom = positions[clampedEndIdx].bottom;
+            
+            selectionState.overlayElement.style.top = startTop + 'px';
+            selectionState.overlayElement.style.height = (endBottom - startTop) + 'px';
         }
         
         if (selectionState.tooltipElement) {
@@ -1956,19 +2051,26 @@ const firebaseConfig = {
         
         const rect = slotElement.getBoundingClientRect();
         
-        // Get accurate slot height from time cells (they don't stretch like bookings with content)
+        // Build array of time cell positions for accurate slot detection
         const container = document.getElementById('gridContainer');
-        const timeCells = container.querySelectorAll('.time-cell');
-        let slotHeight = rect.height / (booking.data.duration * 2); // fallback
-        if (timeCells.length > 0) {
-            slotHeight = timeCells[0].getBoundingClientRect().height;
-        }
+        const timeCells = Array.from(container.querySelectorAll('.time-cell'));
+        const slotPositions = timeCells.map(cell => {
+            const cellRect = cell.getBoundingClientRect();
+            return { top: cellRect.top, bottom: cellRect.bottom, height: cellRect.height };
+        });
         
-        // Calculate where the booking SHOULD start based on consistent slot heights
-        const headerCell = container.querySelector('.header-cell');
-        const headerHeight = headerCell ? headerCell.getBoundingClientRect().height : 0;
-        const containerRect = container.getBoundingClientRect();
-        const slotsFromTop = (booking.start - (res.hours[col.dayIndex * 2] < 24 ? Math.min(...res.hours.filter((h,i) => i % 2 === 0 && res.hours[i] !== res.hours[i+1])) : 9)) * 2;
+        // Find which slot index the booking starts in
+        let startSlotIndex = 0;
+        const bookingTopY = rect.top;
+        for (let i = 0; i < slotPositions.length; i++) {
+            if (bookingTopY >= slotPositions[i].top && bookingTopY < slotPositions[i].bottom) {
+                startSlotIndex = i;
+                break;
+            }
+            if (bookingTopY >= slotPositions[i].top) {
+                startSlotIndex = i;
+            }
+        }
         
         resizeState = {
             active: true,
@@ -1979,7 +2081,8 @@ const firebaseConfig = {
             res: res,
             activeWeekKey: activeWeekKey,
             startY: e.clientY,
-            slotHeight: slotHeight,
+            startSlotIndex: startSlotIndex,
+            slotPositions: slotPositions,
             originalDuration: booking.data.duration,
             currentDuration: booking.data.duration,
             minDuration: 0.5,
@@ -1989,13 +2092,18 @@ const firebaseConfig = {
             tooltipElement: null
         };
         
-        // Create overlay using time cell height for accuracy
+        // Create overlay spanning the correct slots
+        const endSlotIndex = startSlotIndex + (booking.data.duration * 2) - 1;
+        const clampedEndIdx = Math.min(endSlotIndex, slotPositions.length - 1);
+        const overlayTop = slotPositions[startSlotIndex].top;
+        const overlayBottom = slotPositions[clampedEndIdx].bottom;
+        
         const overlay = document.createElement('div');
         overlay.className = 'resize-overlay';
         overlay.style.left = rect.left + 'px';
-        overlay.style.top = rect.top + 'px';
+        overlay.style.top = overlayTop + 'px';
         overlay.style.width = rect.width + 'px';
-        overlay.style.height = (slotHeight * booking.data.duration * 2) + 'px';
+        overlay.style.height = (overlayBottom - overlayTop) + 'px';
         document.body.appendChild(overlay);
         resizeState.overlayElement = overlay;
         
@@ -2764,8 +2872,8 @@ const firebaseConfig = {
         
         loadBookingsForCurrentView(); 
     }
-    function highlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
-    function unhighlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
+    function highlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
+    function unhighlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
     
     async function deleteBooking() { 
         const slotId = document.getElementById('slotId').value;
