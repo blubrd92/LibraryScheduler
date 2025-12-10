@@ -53,7 +53,7 @@
             display: flex;
             align-items: stretch;
             gap: 20px;
-            height: 82vh; /* Moved height here from grid-container */
+            height: 75vh; /* Moved height here from grid-container */
         }
 
         /* === NEW: SIDEBAR STYLES === */
@@ -1948,10 +1948,8 @@ const firebaseConfig = {
         
         const rect = slotElement.getBoundingClientRect();
         
-        // Get accurate slot height by finding an empty slot or time cell
-        const container = document.getElementById('gridContainer');
-        const timeCell = container.querySelector('.time-cell');
-        const slotHeight = timeCell ? timeCell.getBoundingClientRect().height : (rect.height / (booking.data.duration * 2));
+        // Get slot height from the actual booking element
+        const slotHeight = rect.height / (booking.data.duration * 2);
         
         resizeState = {
             active: true,
@@ -1972,13 +1970,13 @@ const firebaseConfig = {
             tooltipElement: null
         };
         
-        // Create overlay positioned over the booking
+        // Create overlay positioned over the booking - use actual rect height
         const overlay = document.createElement('div');
         overlay.className = 'resize-overlay';
         overlay.style.left = rect.left + 'px';
         overlay.style.top = rect.top + 'px';
         overlay.style.width = rect.width + 'px';
-        overlay.style.height = (slotHeight * booking.data.duration * 2) + 'px';
+        overlay.style.height = rect.height + 'px';
         document.body.appendChild(overlay);
         resizeState.overlayElement = overlay;
         
@@ -2793,5 +2791,3 @@ const firebaseConfig = {
 </script>
 </body>
 </html>
-
-
