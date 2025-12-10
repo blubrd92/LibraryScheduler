@@ -1335,17 +1335,21 @@ const firebaseConfig = {
                     bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
                 }
                 
-                // Add overflow indicator if there's extra content that might be clipped
-                const hasExtraContent = booking.data.hasStaff || booking.data.notes;
-                if (hasExtraContent) {
-                    bookingEl.innerHTML += `<span class="overflow-indicator">Hover for details</span>`;
-                }
-                
                 // Add resize handle
                 const resizeHandle = document.createElement('div');
                 resizeHandle.className = 'resize-handle';
                 resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
                 bookingEl.appendChild(resizeHandle);
+                
+                // Check for overflow after element is in DOM and add indicator if needed
+                const checkOverflow = () => {
+                    if (bookingEl.scrollHeight > bookingEl.clientHeight) {
+                        const indicator = document.createElement('span');
+                        indicator.className = 'overflow-indicator';
+                        indicator.innerText = 'Hover for details';
+                        bookingEl.appendChild(indicator);
+                    }
+                };
                 
                 // Event handlers - popover on hover
                 bookingEl.onmouseenter = (e) => {
@@ -1382,6 +1386,9 @@ const firebaseConfig = {
                 bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
                 
                 container.appendChild(bookingEl);
+                
+                // Check overflow after element is in DOM
+                requestAnimationFrame(checkOverflow);
             });
         });
     }
