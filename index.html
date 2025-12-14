@@ -53,7 +53,7 @@
             display: flex;
             align-items: stretch;
             gap: 20px;
-            height: 82vh; /* Moved height here from grid-container */
+            height: 75vh; /* Moved height here from grid-container */
         }
 
         /* === NEW: SIDEBAR STYLES === */
@@ -579,7 +579,7 @@
         <button class="btn-nav" onclick="navigateTime(1)">&#8594;</button>
         
         <div style="width: 1px; height: 30px; background: #ccc; margin: 0 10px;"></div>
-        <button class="btn-primary" onclick="openAdminPanel()">⚙ Admin</button>
+        <button id="btnAdminSettings" class="btn-primary" onclick="openAdminPanel()">⚙ Admin</button>
         <button class="btn-danger" onclick="doLogout()">Logout</button>
     </div>
 </header>
@@ -627,9 +627,12 @@
         </div>
         
         <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-            <button class="btn-success" onclick="saveBooking()">Save Booking</button>
-            <button class="btn-danger" onclick="deleteBooking()">Delete</button>
+            <button id="btnSaveBooking" class="btn-success" onclick="saveBooking()">Save Booking</button>
+            <button id="btnDeleteBooking" class="btn-danger" onclick="deleteBooking()">Delete</button>
             <button onclick="closeModal('bookingModal')">Cancel</button>
+        </div>
+        <div id="readOnlyNotice" class="hidden" style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; text-align: center; color: #856404;">
+            🔒 This resource is admin-only. View only.
         </div>
     </div>
 </div>
@@ -798,6 +801,10 @@
                         <input type="checkbox" id="editDefaultShowNotes" style="width:auto;">
                         <label for="editDefaultShowNotes" style="margin:0; cursor:pointer;">Default "Show Notes" to Checked?</label>
                     </div>
+                    <div class="flex gap" style="margin-top:8px; padding-top:8px; border-top:1px solid #d0e1f5;">
+                        <input type="checkbox" id="editAdminOnly" style="width:auto;">
+                        <label for="editAdminOnly" style="margin:0; cursor:pointer;">🔒 Admin Only (restrict editing to admin account)</label>
+                    </div>
                 </div>
 
                 <!-- Closure Dates Section -->
@@ -857,6 +864,8 @@ const firebaseConfig = {
     const auth = firebase.auth();
 
     const STAFF_EMAIL = "staff@library.internal"; 
+    const VIEWER_EMAIL = "viewer@library.internal";
+    let currentUserRole = null; // 'admin' or 'staff' 
     const ADMIN_PASS = "library"; 
 
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -954,10 +963,24 @@ const firebaseConfig = {
 
         auth.onAuthStateChanged(user => {
             if (user) {
+                // Determine role based on which email logged in
+                if (user.email === STAFF_EMAIL) {
+                    currentUserRole = 'admin';
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Admin)</span>";
+                    document.getElementById('btnAdminSettings').style.display = '';
+                } else if (user.email === VIEWER_EMAIL) {
+                    currentUserRole = 'staff';
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Staff)</span>";
+                    document.getElementById('btnAdminSettings').style.display = 'none';
+                } else {
+                    currentUserRole = 'staff'; // Default to limited permissions
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected</span>";
+                    document.getElementById('btnAdminSettings').style.display = 'none';
+                }
                 document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Staff)</span>";
                 setupRealtimeListeners();
             } else {
+                currentUserRole = null;
                 document.getElementById('loginOverlay').style.display = 'flex';
                 document.getElementById('status-bar').innerHTML = "<span class='offline'>Locked</span>";
             }
@@ -970,16 +993,28 @@ const firebaseConfig = {
         const err = document.getElementById('loginError');
         err.classList.add('hidden');
         
+        // Try admin account first, then viewer account
         auth.signInWithEmailAndPassword(STAFF_EMAIL, pass)
             .catch(error => {
+                // If admin login fails, try viewer account
+                return auth.signInWithEmailAndPassword(VIEWER_EMAIL, pass);
+            })
+            .catch(error => {
                 err.classList.remove('hidden');
-                err.innerText = "Error: " + error.message;
+                err.innerText = "Error: Invalid password";
             });
     }
 
     function doLogout() {
         auth.signOut();
         location.reload();
+    }
+    
+    // Check if current user can edit this resource
+    function canEditResource(res) {
+        if (currentUserRole === 'admin') return true;
+        if (!res) return false;
+        return !res.adminOnly; // staff can edit if not admin-only
     }
 
     function setupRealtimeListeners() {
@@ -1267,25 +1302,31 @@ const firebaseConfig = {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
                         
-                        slot.onclick = (e) => {
-                            if (selectionState.active) return;
-                            if (resizeJustEnded) return;
-                            openBookingModal(emptyId, null, col.subIndex);
-                        };
+                        const canEdit = canEditResource(res);
                         
-                        slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
-                        
-                        // DRAG-AND-DROP: Set up empty slots as drop targets
-                        slot.dataset.slotId = emptyId;
-                        slot.dataset.dayIndex = col.dayIndex;
-                        slot.dataset.timeVal = timeVal;
-                        slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
-                        slot.ondragover = handleDragOver;
-                        slot.ondragleave = handleDragLeave;
-                        slot.ondrop = handleDrop;
-                        
-                        // DRAG-TO-CREATE: mousedown starts selection
-                        slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
+                        if (canEdit) {
+                            slot.onclick = (e) => {
+                                if (selectionState.active) return;
+                                if (resizeJustEnded) return;
+                                openBookingModal(emptyId, null, col.subIndex);
+                            };
+                            
+                            slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
+                            
+                            // DRAG-AND-DROP: Set up empty slots as drop targets
+                            slot.dataset.slotId = emptyId;
+                            slot.dataset.dayIndex = col.dayIndex;
+                            slot.dataset.timeVal = timeVal;
+                            slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                            slot.ondragover = handleDragOver;
+                            slot.ondragleave = handleDragLeave;
+                            slot.ondrop = handleDrop;
+                            
+                            // DRAG-TO-CREATE: mousedown starts selection
+                            slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
+                        } else {
+                            slot.style.cursor = 'default';
+                        }
                     }
                     
                     // Store reference to this slot for positioning bookings
@@ -1345,11 +1386,15 @@ const firebaseConfig = {
                     bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
                 }
                 
-                // Add resize handle
-                const resizeHandle = document.createElement('div');
-                resizeHandle.className = 'resize-handle';
-                resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
-                bookingEl.appendChild(resizeHandle);
+                const canEdit = canEditResource(res);
+                
+                // Add resize handle only if user can edit
+                if (canEdit) {
+                    const resizeHandle = document.createElement('div');
+                    resizeHandle.className = 'resize-handle';
+                    resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
+                    bookingEl.appendChild(resizeHandle);
+                }
                 
                 // Event handlers - popover on hover
                 bookingEl.onmouseenter = (e) => {
@@ -1371,19 +1416,23 @@ const firebaseConfig = {
                     openBookingModal(booking.id, booking.data, col.subIndex);
                 };
                 
-                // DRAG-AND-DROP
-                bookingEl.draggable = true;
-                bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
-                bookingEl.ondragend = handleDragEnd;
-                
-                bookingEl.dataset.bookingId = booking.id;
-                bookingEl.dataset.bookingStart = booking.start;
-                bookingEl.dataset.bookingDuration = booking.data.duration;
-                bookingEl.dataset.dayIndex = col.dayIndex;
-                bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
-                bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
-                bookingEl.ondragleave = handleDragLeave;
-                bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                // DRAG-AND-DROP (only if user can edit)
+                if (canEdit) {
+                    bookingEl.draggable = true;
+                    bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
+                    bookingEl.ondragend = handleDragEnd;
+                    
+                    bookingEl.dataset.bookingId = booking.id;
+                    bookingEl.dataset.bookingStart = booking.start;
+                    bookingEl.dataset.bookingDuration = booking.data.duration;
+                    bookingEl.dataset.dayIndex = col.dayIndex;
+                    bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                    bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
+                    bookingEl.ondragleave = handleDragLeave;
+                    bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                } else {
+                    bookingEl.style.cursor = 'default';
+                }
                 
                 container.appendChild(bookingEl);
                 
@@ -2475,6 +2524,21 @@ const firebaseConfig = {
             durSel.appendChild(opt);
         }
         if(durSel.options.length === 0) { const opt = document.createElement('option'); opt.innerText = "No time available"; durSel.appendChild(opt); }
+        
+        // Check permissions and show/hide edit controls
+        const canEdit = canEditResource(res);
+        document.getElementById('btnSaveBooking').style.display = canEdit ? '' : 'none';
+        document.getElementById('btnDeleteBooking').style.display = (canEdit && data) ? '' : 'none';
+        document.getElementById('readOnlyNotice').style.display = canEdit ? 'none' : '';
+        
+        // Disable form fields if read-only
+        document.getElementById('bookName').disabled = !canEdit;
+        document.getElementById('bookDuration').disabled = !canEdit;
+        document.getElementById('bookNotes').disabled = !canEdit;
+        document.getElementById('bookShowNotes').disabled = !canEdit;
+        document.getElementById('bookHasStaff').disabled = !canEdit;
+        document.getElementById('bookStaffName').disabled = !canEdit;
+        
         modal.style.display = 'flex';
     }
 
@@ -2569,6 +2633,7 @@ const firebaseConfig = {
         document.getElementById('editViewMode').value = r.viewMode || 'week';
         document.getElementById('editSubRooms').value = r.subRooms || '';
         document.getElementById('editDefaultShowNotes').checked = r.defaultShowNotes || false;
+        document.getElementById('editAdminOnly').checked = r.adminOnly || false;
         
         // Load Sidebar Settings
         document.getElementById('editEnableSidebar').checked = r.enableSidebar || false;
@@ -2936,6 +3001,7 @@ const firebaseConfig = {
         target.viewMode = document.getElementById('editViewMode').value;
         target.subRooms = document.getElementById('editSubRooms').value;
         target.defaultShowNotes = document.getElementById('editDefaultShowNotes').checked;
+        target.adminOnly = document.getElementById('editAdminOnly').checked;
 
         // Save Sidebar Settings
         target.enableSidebar = document.getElementById('editEnableSidebar').checked;
@@ -2986,7 +3052,11 @@ const firebaseConfig = {
         }
         
         if (booking.data.notes) {
-            html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+            if (booking.data.showNotes) {
+                html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+            } else {
+                html += `<div class="popover-notes" style="font-style: italic; opacity: 0.8;">📝 Click to view note</div>`;
+            }
         }
         
         popover.innerHTML = html;
