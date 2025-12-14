@@ -51,9 +51,9 @@
         /* === UPDATED: LAYOUT WRAPPER === */
         .layout-wrapper {
             display: flex;
-            align-items: flex-start;
+            align-items: stretch;
             gap: 20px;
-            height: 75vh; /* Moved height here from grid-container */
+            height: 82vh; /* Moved height here from grid-container */
         }
 
         /* === NEW: SIDEBAR STYLES === */
@@ -64,7 +64,6 @@
             border: 1px solid var(--border);
             border-radius: 4px;
             padding: 0px 15px;
-            height: 100%;
             overflow-y: auto;
             white-space: normal;
             box-sizing: border-box;
@@ -76,7 +75,7 @@
 
         /* Grid */
         /* Updated height to 100% to fill the layout-wrapper */
-        .grid-container { display: grid; grid-template-columns: 85px repeat(7, 1fr); border: 1px solid var(--border); height: 100%; overflow-y: auto; position: relative; background: #fff; flex-grow: 1; }
+        .grid-container { display: grid; grid-template-columns: 85px repeat(7, 1fr); grid-auto-rows: 1fr; border: 1px solid var(--border); height: 100%; overflow-y: auto; position: relative; background: #fff; flex-grow: 1; }
         .header-cell { 
             background: var(--primary); 
             color: white; 
@@ -114,16 +113,16 @@
             border-right: 1px solid #ccc; 
             padding: 2px; 
             font-size: 0.95em; 
-            min-height: 25px; 
+            min-height: 30px; 
             cursor: pointer; 
             position: relative; 
             transition: background 0.1s; 
             box-sizing: border-box; 
         }
         
-        .slot:not(.booked-head):not(.booked-body):not(.closed):hover { background-color: #e3f2fd; }
+        .slot:not(.has-booking):not(.booked-body):not(.closed):hover { background-color: #e3f2fd; }
         
-        .slot:not(.booked-head):not(.booked-body):not(.closed):hover::after {
+        .slot:not(.has-booking):not(.booked-body):not(.closed):hover::after {
             content: attr(data-time);
             position: absolute;
             bottom: 100%; left: 50%; transform: translateX(-50%);
@@ -135,24 +134,119 @@
         .slot.closed { background-color: #cccccc !important; border-color: #cccccc; cursor: not-allowed; opacity: 1; pointer-events: none; }
         
         /* Merged Cell Styles */
-        .slot.booked-head { 
+        .slot.booked-body { display: none; } 
+        
+        /* Floating booking elements (absolutely positioned) */
+        .booking-float {
+            position: absolute;
             color: white; 
             border-radius: 4px; 
             padding: 6px 8px; 
             font-weight: 600; 
-            z-index: 2; 
+            z-index: 10; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column; 
             align-items: flex-start;
             justify-content: flex-start; 
-            height: 100%; 
-            overflow: hidden; 
+            overflow: hidden;
+            cursor: grab;
+            box-sizing: border-box;
         }
         
-        .slot.booked-body { display: none; } 
+        .booking-float.with-staff { border-left: 5px solid #f1c40f; }
         
-        .slot.booked-head.with-staff { border-left: 5px solid #f1c40f; } 
+        .booking-float .slot-name,
+        .booking-float .slot-staff,
+        .booking-float .slot-notes {
+            display: block;
+            width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        .booking-float .slot-time {
+            display: block;
+            width: 100%;
+            font-weight: normal;
+            font-size: 0.85em;
+            opacity: 0.9;
+        }
+        
+        /* Overflow indicator */
+        .booking-float .overflow-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 0.7em;
+            font-weight: 600;
+            background: rgba(0,0,0,0.3);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Popover card on hover */
+        .booking-popover {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 100;
+            max-width: 280px;
+            min-width: 200px;
+            pointer-events: none;
+            font-size: 0.9em;
+            color: #333;
+        }
+        
+        .booking-popover .popover-name {
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-bottom: 4px;
+        }
+        
+        .booking-popover .popover-time {
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .booking-popover .popover-staff {
+            color: #e67e22;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        
+        .booking-popover .popover-notes {
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+            margin-top: 4px;
+            white-space: pre-wrap;
+        }
+        
+        .booking-float .resize-handle {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            cursor: ns-resize;
+            background: transparent;
+        }
+        
+        .booking-float .resize-handle:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Slots under bookings - subtle indicator */
+        .slot.has-booking {
+            /* Can leave empty or add subtle background */
+        }
         
         .booking-hover-effect {
             opacity: 1 !important;
@@ -197,6 +291,7 @@
         .login-box input { width: 100%; padding: 12px; margin: 15px 0; font-size: 1.1rem; box-sizing: border-box; }
         .login-box button { width: 100%; padding: 12px; background: var(--success); color: white; font-size: 1.1rem; border: none; border-radius: 4px; cursor: pointer; }
         .login-box button:hover { background: #219150; }
+        #loginError { color: var(--danger); margin: 15px 0 0 0; font-size: 0.9rem; word-wrap: break-word; overflow-wrap: break-word; }
 
         /* Admin Styles */
         .settings-box { background: white; padding: 0; width: 700px; max-height: 90vh; overflow-y: auto; border-radius: 8px; }
@@ -224,6 +319,232 @@
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.success { background-color: var(--success); }
         .toast.error { background-color: var(--danger); }
+
+        /* Drag-and-Drop Styles */
+        .booking-float { cursor: grab; }
+        .booking-float:active { cursor: grabbing; }
+        .slot.dragging { opacity: 0.5; cursor: grabbing; }
+        
+        /* Floating drag tooltip (used when dragging over booked slots) */
+        .drag-tooltip {
+            position: fixed;
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 1001;
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        /* Highlight overlay for showing target slot within a booked element */
+        .drag-slot-highlight {
+            position: fixed;
+            background: rgba(39, 174, 96, 0.4);
+            border: 2px solid var(--success);
+            border-radius: 3px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .drag-slot-highlight.invalid {
+            background: rgba(192, 57, 43, 0.4);
+            border-color: var(--danger);
+        }
+        .slot.drag-over-valid { 
+            background-color: rgba(39, 174, 96, 0.3) !important; 
+            box-shadow: inset 0 0 0 2px var(--success);
+        }
+        .slot.drag-over-invalid { 
+            background-color: rgba(192, 57, 43, 0.3) !important; 
+            box-shadow: inset 0 0 0 2px var(--danger);
+        }
+        /* Keep tooltip visible during drag on empty slots */
+        .slot:not(.has-booking).drag-over-valid::after,
+        .slot:not(.has-booking).drag-over-invalid::after {
+            content: attr(data-time);
+            position: absolute;
+            bottom: 100%; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: #333; 
+            color: #fff; 
+            padding: 4px 8px; 
+            border-radius: 4px;
+            font-size: 0.85em; 
+            white-space: nowrap; 
+            pointer-events: none; 
+            z-index: 20;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        /* Allow overflow on booked slots during drag for visual feedback */
+        .booking-float.drag-over-valid,
+        .booking-float.drag-over-invalid {
+            overflow: visible;
+        }
+
+        /* Drag-to-Create Selection */
+        .slot.selecting {
+            background-color: rgba(39, 174, 96, 0.3) !important;
+        }
+        .selection-overlay {
+            position: fixed;
+            background: rgba(39, 174, 96, 0.4);
+            border: 2px solid var(--success);
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .selection-tooltip {
+            position: fixed;
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 101;
+            pointer-events: none;
+        }
+
+        /* Resize Handle */
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 10px;
+            cursor: ns-resize;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.15));
+            border-radius: 0 0 4px 4px;
+            transition: background 0.15s;
+        }
+        .resize-handle:hover {
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.3));
+        }
+        .resize-overlay {
+            position: fixed;
+            background: rgba(39, 174, 96, 0.4);
+            border: 2px dashed var(--success);
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .resize-tooltip {
+            position: fixed;
+            background: #333;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            white-space: nowrap;
+            z-index: 101;
+            pointer-events: none;
+        }
+
+        /* Closure Date Cell Styles */
+        .slot.closed.closure-day {
+            /* Same as regular closed cells */
+        }
+        
+        /* Middle cell with closure reason text */
+        .slot.closed.closure-day.has-reason {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #555;
+            overflow: visible;
+            z-index: 6;
+        }
+
+        /* Closure Date Admin Styles */
+        .closure-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .closure-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        .closure-item:last-child {
+            border-bottom: none;
+        }
+        .closure-item-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .closure-item-date {
+            font-weight: bold;
+        }
+        .closure-item-reason {
+            font-size: 0.85em;
+            color: #666;
+        }
+        .closure-item button {
+            padding: 4px 8px;
+            font-size: 0.8em;
+        }
+        .closure-empty {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
+        }
+        .closure-add-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .closure-add-row input[type="date"] {
+            flex: 0 0 140px;
+        }
+        .closure-add-row input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+        }
+        .closure-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        /* Move Confirmation Modal Styles */
+        .move-detail { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 6px; 
+            margin-bottom: 15px; 
+            border: 1px solid #e9ecef;
+        }
+        .move-detail-row { 
+            display: flex; 
+            margin-bottom: 8px; 
+        }
+        .move-detail-row:last-child { margin-bottom: 0; }
+        .move-detail-label { 
+            font-weight: bold; 
+            width: 80px; 
+            color: #555; 
+        }
+        .move-detail-value { flex: 1; }
+        .move-arrow { 
+            text-align: center; 
+            font-size: 1.5rem; 
+            color: var(--primary); 
+            margin: 10px 0; 
+        }
     </style>
 </head>
 <body>
@@ -232,9 +553,9 @@
     <div class="login-box">
         <h2>Library Reservations Login</h2>
         <p>Please enter the shared access code.</p>
-        <input type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()">
+        <input type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()" autofocus>
         <button onclick="doLogin()">Unlock Reservations</button>
-        <p id="loginError" style="color:red; display:none; margin-top:10px;">Incorrect Password</p>
+        <p id="loginError" class="hidden">Incorrect Password</p>
     </div>
 </div>
 
@@ -288,10 +609,10 @@
         <div class="form-group" id="staffSection" style="display:none; background: #fff8e1; padding: 10px; border-radius: 4px; border: 1px solid #ffe082;">
             <div class="flex gap">
                 <input type="checkbox" id="bookHasStaff" onchange="toggleStaffInput()" style="width:auto;">
-                <label for="bookHasStaff" style="margin:0; font-weight:normal; cursor:pointer;">Staff Assistance Required?</label>
+                <label for="bookHasStaff" style="margin:0; font-weight:normal; cursor:pointer;">Staff/Volunteer Assistance Required?</label>
             </div>
             <div id="staffInputContainer" class="hidden" style="margin-top: 10px;">
-                <label style="font-size:0.8em; color:#666;">Assigned Staff Member:</label>
+                <label style="font-size:0.8em; color:#666;">Assigned Staff/Volunteer:</label>
                 <input type="text" id="bookStaffName" placeholder="e.g. John">
             </div>
         </div>
@@ -309,6 +630,107 @@
             <button class="btn-success" onclick="saveBooking()">Save Booking</button>
             <button class="btn-danger" onclick="deleteBooking()">Delete</button>
             <button onclick="closeModal('bookingModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Move Confirmation Modal -->
+<div id="moveModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Confirm Reschedule</div>
+        <input type="hidden" id="moveSourceId">
+        <input type="hidden" id="moveTargetId">
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">Patron:</span>
+                <span class="move-detail-value" id="movePatronName"></span>
+            </div>
+        </div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">From:</span>
+                <span class="move-detail-value" id="moveFromTime"></span>
+            </div>
+        </div>
+        
+        <div class="move-arrow">↓</div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">To:</span>
+                <span class="move-detail-value" id="moveToTime"></span>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-success" onclick="executeMoveBooking()">Move Booking</button>
+            <button onclick="cancelMove()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Resize Confirmation Modal -->
+<div id="resizeModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Confirm Duration Change</div>
+        <input type="hidden" id="resizeBookingId">
+        <input type="hidden" id="resizeNewDuration">
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">Patron:</span>
+                <span class="move-detail-value" id="resizePatronName"></span>
+            </div>
+        </div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">From:</span>
+                <span class="move-detail-value" id="resizeFromDuration"></span>
+            </div>
+        </div>
+        
+        <div class="move-arrow">↓</div>
+        
+        <div class="move-detail">
+            <div class="move-detail-row">
+                <span class="move-detail-label">To:</span>
+                <span class="move-detail-value" id="resizeToDuration"></span>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-success" onclick="executeResize()">Update Duration</button>
+            <button onclick="cancelResize()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Import Closures Modal -->
+<div id="importClosuresModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">Import Settings for New Resource</div>
+        <p style="margin-bottom: 15px;">Would you like to import settings from an existing resource?</p>
+        
+        <div class="form-group">
+            <label>Import Closure Dates From:</label>
+            <select id="importClosuresSource">
+                <option value="">-- No, start fresh --</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Import Operating Hours From:</label>
+            <select id="importHoursSource">
+                <option value="">-- Use default hours --</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-success" onclick="confirmImportSettings()">Create Resource</button>
+            <button onclick="cancelImportSettings()">Cancel</button>
         </div>
     </div>
 </div>
@@ -378,14 +800,39 @@
                     </div>
                 </div>
 
+                <!-- Closure Dates Section -->
+                <div class="form-group" style="background: #fce4ec; padding: 10px; border-radius: 4px; border: 1px solid #f8bbd9;">
+                    <label style="font-weight:bold; color:#c2185b; margin-bottom:10px; display:block;">📅 Closure Dates (Holidays/Closures)</label>
+                    
+                    <div class="closure-add-row">
+                        <input type="date" id="newClosureDate" title="Start Date">
+                        <span style="align-self: center; color: #666;">to</span>
+                        <input type="date" id="newClosureEndDate" title="End Date (optional, leave blank for single day)">
+                        <input type="text" id="newClosureReason" placeholder="Reason (e.g. Holiday)">
+                        <button class="btn-success" onclick="addClosureDate()">Add</button>
+                    </div>
+                    
+                    <div id="closureList" class="closure-list">
+                        <div class="closure-empty">No closure dates set</div>
+                    </div>
+                    
+                    <div class="closure-actions">
+                        <button onclick="applyClosuresToAllResources()" style="font-size:0.85em;">Apply to All Resources</button>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <h4 style="margin: 15px 0 5px 0; border-bottom: 2px solid #eee; padding-bottom:5px;">Operating Hours (24h Format)</h4>
                     <div class="day-config-grid" id="daysConfigContainer"></div>
+                    <div class="closure-actions" style="margin-top: 10px;">
+                        <button onclick="applyHoursToAllResources()" style="font-size:0.85em;">Apply to All Resources</button>
+                    </div>
                 </div>
             </div>
             
-            <div style="text-align: right; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
-                <button class="btn-primary" onclick="saveAllSettings()" style="width: 200px; padding: 12px;">SAVE CHANGES</button>
+            <div style="display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                <button class="btn-success" onclick="saveAllSettings()">Save Changes</button>
+                <button onclick="closeModal('settingsOverlay')">Cancel</button>
             </div>
         </div>
     </div>
@@ -439,6 +886,60 @@ const firebaseConfig = {
     let bookingColorMap = {};
     let activeListenerUnsub = null;
 
+    // Pending new resource data (for import closures flow)
+    let pendingNewResource = null;
+
+    // DRAG-AND-DROP STATE
+    let dragState = {
+        sourceId: null,
+        sourceData: null,
+        isDragging: false,
+        isSaving: false,
+        tooltipElement: null,
+        highlightElement: null,
+        lastInvalidReason: null,
+        wasOverValidTarget: false
+    };
+
+    // DRAG-TO-CREATE SELECTION STATE
+    let selectionState = {
+        active: false,
+        startSlotId: null,
+        startTime: 0,
+        startDayIndex: 0,
+        subIndex: null,
+        startY: 0,
+        slotHeight: 0,
+        maxDuration: 0,
+        currentDuration: 0.5,
+        res: null,
+        activeWeekKey: null,
+        startSlotRect: null,
+        overlayElement: null,
+        tooltipElement: null
+    };
+
+    // RESIZE STATE (for existing bookings)
+    let resizeState = {
+        active: false,
+        bookingId: null,
+        bookingData: null,
+        bookingStart: 0,
+        col: null,
+        res: null,
+        activeWeekKey: null,
+        startY: 0,
+        slotHeight: 0,
+        originalDuration: 0,
+        currentDuration: 0,
+        minDuration: 0.5,
+        maxDuration: 0,
+        originalRect: null,
+        overlayElement: null,
+        tooltipElement: null
+    };
+    let resizeJustEnded = false;
+
     function init() {
         const d = new Date();
         const day = d.getDay();
@@ -467,11 +968,11 @@ const firebaseConfig = {
     function doLogin() {
         const pass = document.getElementById('loginPass').value;
         const err = document.getElementById('loginError');
-        err.style.display = 'none';
+        err.classList.add('hidden');
         
         auth.signInWithEmailAndPassword(STAFF_EMAIL, pass)
             .catch(error => {
-                err.style.display = 'block';
+                err.classList.remove('hidden');
                 err.innerText = "Error: " + error.message;
             });
     }
@@ -486,7 +987,7 @@ const firebaseConfig = {
             if (doc.exists) {
                 resources = doc.data().list || [];
             } else {
-                resources = [{ id: 'res_default', name: 'General Area', viewMode: 'week', hours: DEFAULT_HOURS }];
+                resources = [{ id: 'res_default', name: 'General Area', viewMode: 'week', hours: DEFAULT_HOURS, closureDates: [] }];
                 db.collection('system').doc('resources').set({ list: resources });
             }
             handleResourceUpdate();
@@ -612,13 +1113,42 @@ const firebaseConfig = {
         } else {
             const endWeek = new Date(currentWeekStart);
             endWeek.setDate(endWeek.getDate() + 6);
-            document.getElementById('rangeDisplay').innerText = `${formatDateShort(currentWeekStart)} — ${formatDateShort(endWeek)}`;
+            document.getElementById('rangeDisplay').innerText = `${formatDateShort(currentWeekStart)} - ${formatDateShort(endWeek)}`;
             const y = currentWeekStart.getFullYear();
             const m = String(currentWeekStart.getMonth() + 1).padStart(2, '0');
             const d = String(currentWeekStart.getDate()).padStart(2, '0');
             document.getElementById('datePicker').value = `${y}-${m}-${d}`;
         }
-        document.getElementById('headerResourceName').innerHTML = res.name;
+        document.getElementById('headerResourceName').innerText = res.name;
+    }
+
+    // Helper to check if a date is a closure date for the resource
+    function getClosureReason(res, date) {
+        if (!res.closureDates || !Array.isArray(res.closureDates)) return null;
+        const dateStr = formatDateISO(date);
+        
+        for (const closure of res.closureDates) {
+            // Single day closure
+            if (!closure.endDate) {
+                if (closure.date === dateStr) {
+                    return closure.reason;
+                }
+            } else {
+                // Range closure - check if date falls within range
+                if (dateStr >= closure.date && dateStr <= closure.endDate) {
+                    return closure.reason;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Format date as YYYY-MM-DD for comparison
+    function formatDateISO(d) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     function renderGrid() {
@@ -646,7 +1176,10 @@ const firebaseConfig = {
         }
 
         container.appendChild(createDiv('header-cell', 'Time'));
-        columns.forEach(col => { container.appendChild(createDiv('header-cell', col.header)); });
+        columns.forEach(col => { 
+            const headerDiv = createDiv('header-cell', col.header);
+            container.appendChild(headerDiv); 
+        });
 
         const activeWeekKey = getWeekKey(isDayView ? currentDayDate : currentWeekStart);
         let gridBookings = [];
@@ -684,6 +1217,14 @@ const firebaseConfig = {
         if(minH > maxH) { minH = 9; maxH = 17; }
 
         const totalSlots = (maxH - minH) * 2;
+        const middleSlotIndex = Math.floor(totalSlots / 2);
+        
+        // Track which columns have shown their closure reason
+        const closureReasonShown = {};
+        
+        // Track slot elements for positioning bookings later
+        const slotElements = {}; // key: "colIndex-slotIndex" -> element
+        
         for (let i = 0; i < totalSlots; i++) {
             const timeVal = minH + (i * 0.5);
             const displayTime = formatTime(timeVal);
@@ -692,56 +1233,1161 @@ const firebaseConfig = {
             
             container.appendChild(createDiv(`time-cell ${rowClass}`, displayTime));
 
-            columns.forEach(col => {
+            columns.forEach((col, colIndex) => {
+                const closureReason = getClosureReason(res, col.date);
                 const dayStart = res.hours[col.dayIndex * 2];
                 const dayEnd = res.hours[(col.dayIndex * 2) + 1];
                 const slot = document.createElement('div');
                 slot.className = `slot ${rowClass}`;
                 
-                if (timeVal < dayStart || timeVal >= dayEnd || dayStart === dayEnd) {
+                // Check for closure date first (entire day closed)
+                if (closureReason) {
+                    slot.classList.add('closed', 'closure-day');
+                    
+                    // Show reason text only in the middle cell of this column
+                    const colKey = `${col.dayIndex}-${col.subIndex}`;
+                    if (!closureReasonShown[colKey] && i === middleSlotIndex) {
+                        slot.classList.add('has-reason');
+                        slot.innerText = closureReason;
+                        closureReasonShown[colKey] = true;
+                    }
+                    
+                    container.appendChild(slot);
+                } else if (timeVal < dayStart || timeVal >= dayEnd || dayStart === dayEnd) {
                     slot.classList.add('closed');
                     container.appendChild(slot);
                 } else {
+                    // Check if this slot is covered by a booking (for visual reference, not content)
                     const booking = gridBookings.find(b => b.dayIndex === col.dayIndex && (b.subIndex === col.subIndex) && timeVal >= b.start && timeVal < b.end);
                     if (booking) {
-                        const colorIndex = bookingColorMap[booking.id];
-                        const colorClass = `bg-color-${colorIndex}`;
+                        slot.classList.add('has-booking');
                         slot.dataset.bid = booking.id;
-                        slot.onmouseenter = () => highlightBooking(booking.id);
-                        slot.onmouseleave = () => unhighlightBooking(booking.id);
-
-                        if (timeVal === booking.start) {
-                            const spanCount = booking.data.duration * 2; 
-                            slot.style.gridRow = `span ${spanCount}`;
-                            slot.style.height = "100%"; 
-                            
-                            slot.className = `slot ${rowClass} booked-head ${colorClass}`;
-                            if(booking.data.hasStaff) slot.classList.add('with-staff');
-                            
-                            slot.innerHTML = `<span class="slot-name">${booking.data.name} <span style="font-weight:normal; font-size:0.9em; opacity:0.9">(${formatTime(booking.start)} - ${formatTime(booking.end)})</span></span>`;
-                            
-                            if(booking.data.hasStaff) {
-                                slot.innerHTML += `<span class="slot-staff">w/ ${booking.data.staffName}</span>`;
-                            }
-                            
-                            if(booking.data.showNotes && booking.data.notes) {
-                                slot.innerHTML += `<span style="display:block; font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${booking.data.notes}</span>`;
-                            }
-
-                            slot.onclick = () => openBookingModal(booking.id, booking.data, col.subIndex);
-                            container.appendChild(slot);
-                        } else {
-                            return; 
-                        }
                     } else {
+                        // Empty slot - set up for interactions
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
-                        slot.onclick = () => openBookingModal(emptyId, null, col.subIndex);
+                        
+                        slot.onclick = (e) => {
+                            if (selectionState.active) return;
+                            if (resizeJustEnded) return;
+                            openBookingModal(emptyId, null, col.subIndex);
+                        };
+                        
                         slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
-                        container.appendChild(slot);
+                        
+                        // DRAG-AND-DROP: Set up empty slots as drop targets
+                        slot.dataset.slotId = emptyId;
+                        slot.dataset.dayIndex = col.dayIndex;
+                        slot.dataset.timeVal = timeVal;
+                        slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                        slot.ondragover = handleDragOver;
+                        slot.ondragleave = handleDragLeave;
+                        slot.ondrop = handleDrop;
+                        
+                        // DRAG-TO-CREATE: mousedown starts selection
+                        slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
                     }
+                    
+                    // Store reference to this slot for positioning bookings
+                    slotElements[`${colIndex}-${i}`] = slot;
+                    container.appendChild(slot);
                 }
             });
+        }
+        
+        // Now create absolutely positioned booking elements
+        // Use requestAnimationFrame to ensure grid layout is complete
+        requestAnimationFrame(() => {
+            gridBookings.forEach(booking => {
+                const col = columns.find(c => c.dayIndex === booking.dayIndex && c.subIndex === booking.subIndex);
+                if (!col) return;
+                
+                const colIndex = columns.indexOf(col);
+                const startSlotIndex = (booking.start - minH) * 2;
+                const endSlotIndex = startSlotIndex + (booking.data.duration * 2) - 1;
+                
+                const startSlot = slotElements[`${colIndex}-${startSlotIndex}`];
+                const endSlot = slotElements[`${colIndex}-${endSlotIndex}`];
+                
+                if (!startSlot || !endSlot) return;
+                
+                const startRect = startSlot.getBoundingClientRect();
+                const endRect = endSlot.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                
+                const colorIndex = bookingColorMap[booking.id];
+                const colorClass = `bg-color-${colorIndex}`;
+                
+                const bookingEl = document.createElement('div');
+                bookingEl.className = `booking-float ${colorClass}`;
+                if (booking.data.hasStaff) bookingEl.classList.add('with-staff');
+                bookingEl.dataset.bid = booking.id;
+                
+                // Position relative to container, accounting for cell padding
+                const padding = 2; // matches .slot padding
+                bookingEl.style.position = 'absolute';
+                bookingEl.style.left = (startRect.left - containerRect.left + container.scrollLeft + padding) + 'px';
+                bookingEl.style.top = (startRect.top - containerRect.top + container.scrollTop + padding) + 'px';
+                bookingEl.style.width = (startRect.width - padding * 2 - 1) + 'px'; // -1 for border-right
+                bookingEl.style.height = (endRect.bottom - startRect.top - padding * 2) + 'px';
+                
+                // Content
+                bookingEl.innerHTML = `<span class="slot-name">${escapeHtml(booking.data.name)}</span>`;
+                bookingEl.innerHTML += `<span class="slot-time">${formatTime(booking.start)} - ${formatTime(booking.end)} (${booking.data.duration}h)</span>`;
+                
+                if (booking.data.hasStaff) {
+                    bookingEl.innerHTML += `<span class="slot-staff">w/ ${escapeHtml(booking.data.staffName)}</span>`;
+                }
+                
+                if (booking.data.showNotes && booking.data.notes) {
+                    bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.85em; margin-top:4px; opacity:0.9; border-top:1px solid rgba(255,255,255,0.2); padding-top:2px;">${escapeHtml(booking.data.notes)}</span>`;
+                } else if (!booking.data.showNotes && booking.data.notes) {
+                    bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
+                }
+                
+                // Add resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
+                bookingEl.appendChild(resizeHandle);
+                
+                // Event handlers - popover on hover
+                bookingEl.onmouseenter = (e) => {
+                    highlightBooking(booking.id);
+                    showBookingPopover(e, booking);
+                };
+                bookingEl.onmousemove = (e) => {
+                    updatePopoverPosition(e);
+                };
+                bookingEl.onmouseleave = () => {
+                    unhighlightBooking(booking.id);
+                    hideBookingPopover();
+                };
+                
+                bookingEl.onclick = (e) => {
+                    if (e.target.classList.contains('resize-handle')) return;
+                    if (resizeJustEnded) return;
+                    hideBookingPopover();
+                    openBookingModal(booking.id, booking.data, col.subIndex);
+                };
+                
+                // DRAG-AND-DROP
+                bookingEl.draggable = true;
+                bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
+                bookingEl.ondragend = handleDragEnd;
+                
+                bookingEl.dataset.bookingId = booking.id;
+                bookingEl.dataset.bookingStart = booking.start;
+                bookingEl.dataset.bookingDuration = booking.data.duration;
+                bookingEl.dataset.dayIndex = col.dayIndex;
+                bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
+                bookingEl.ondragleave = handleDragLeave;
+                bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                
+                container.appendChild(bookingEl);
+                
+                // Check overflow after layout is fully complete (double rAF ensures paint)
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        if (bookingEl.scrollHeight > bookingEl.clientHeight) {
+                            const indicator = document.createElement('span');
+                            indicator.className = 'overflow-indicator';
+                            indicator.innerText = 'Hover for details';
+                            bookingEl.appendChild(indicator);
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    // --- DRAG-AND-DROP HANDLERS ---
+    function handleDragStart(e, bookingId, bookingData) {
+        // Don't start drag from resize handle
+        if (e.target.classList.contains('resize-handle')) {
+            e.preventDefault();
+            return;
+        }
+        
+        // Block if a move is already in progress, resize is active, or selection is active
+        if (dragState.isSaving || resizeState.active || selectionState.active) {
+            e.preventDefault();
+            return;
+        }
+        
+        // Hide any open popover
+        hideBookingPopover();
+        
+        dragState.sourceId = bookingId;
+        dragState.sourceData = bookingData;
+        dragState.isDragging = true;
+        
+        // Firefox requires setData
+        e.dataTransfer.setData('text/plain', bookingId);
+        e.dataTransfer.effectAllowed = 'move';
+        
+        // Add dragging class after a small delay to not affect the drag image
+        setTimeout(() => {
+            e.target.classList.add('dragging');
+        }, 0);
+    }
+
+    function handleDragEnd(e) {
+        dragState.isDragging = false;
+        e.target.classList.remove('dragging');
+        
+        // Show toast if user released on invalid target with a reason
+        if (dragState.lastInvalidReason && !dragState.wasOverValidTarget) {
+            showToast(dragState.lastInvalidReason, 'error');
+        }
+        
+        // Clean up floating tooltip
+        if (dragState.tooltipElement) {
+            dragState.tooltipElement.remove();
+            dragState.tooltipElement = null;
+        }
+        
+        // Clean up highlight element
+        if (dragState.highlightElement) {
+            dragState.highlightElement.remove();
+            dragState.highlightElement = null;
+        }
+        
+        // Clean up any lingering drag-over classes and data-time attributes
+        document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
+            el.classList.remove('drag-over-valid', 'drag-over-invalid');
+            if (el.classList.contains('booking-float')) {
+                el.removeAttribute('data-time');
+            }
+        });
+        
+        // Clear drag state unless modal is open (user is confirming move)
+        if (document.getElementById('moveModal').style.display !== 'flex') {
+            dragState.sourceId = null;
+            dragState.sourceData = null;
+        }
+        dragState.lastInvalidReason = null;
+        dragState.wasOverValidTarget = false;
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        if (!dragState.isDragging || !dragState.sourceId) return;
+        
+        const slot = e.currentTarget;
+        const targetSlotId = slot.dataset.slotId;
+        
+        // Remove existing classes
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
+        
+        // Validate the drop target
+        const validation = validateDropTarget(targetSlotId);
+        
+        if (validation.valid) {
+            slot.classList.add('drag-over-valid');
+            e.dataTransfer.dropEffect = 'move';
+            dragState.lastInvalidReason = null;
+            dragState.wasOverValidTarget = true;
+        } else {
+            slot.classList.add('drag-over-invalid');
+            e.dataTransfer.dropEffect = 'none';
+            dragState.lastInvalidReason = validation.reason;
+            dragState.wasOverValidTarget = false;
+        }
+    }
+
+    function handleDragLeave(e) {
+        const el = e.currentTarget;
+        el.classList.remove('drag-over-valid', 'drag-over-invalid');
+        // Clean up data-time if it was set on a booked slot during drag
+        if (el.classList.contains('booking-float')) {
+            el.removeAttribute('data-time');
+            // Remove floating tooltip and highlight when leaving booked slot
+            if (dragState.tooltipElement) {
+                dragState.tooltipElement.remove();
+                dragState.tooltipElement = null;
+            }
+            if (dragState.highlightElement) {
+                dragState.highlightElement.remove();
+                dragState.highlightElement = null;
+            }
+        }
+    }
+
+    // Calculate which time slot the mouse is over within a booked element
+    function getTimeSlotFromPosition(e, bookingStart, bookingDuration) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
+        const slotHeight = rect.height / (bookingDuration * 2); // each slot is 0.5 hours
+        const slotIndex = Math.floor(relativeY / slotHeight);
+        const targetTime = bookingStart + (slotIndex * 0.5);
+        return targetTime;
+    }
+
+    function handleBookedSlotDragOver(e, booking, col, res, activeWeekKey) {
+        e.preventDefault();
+        if (!dragState.isDragging || !dragState.sourceId) return;
+        
+        const slot = e.currentTarget;
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
+        
+        // Calculate target time based on mouse position
+        const rect = slot.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
+        const slotHeight = rect.height / (booking.data.duration * 2);
+        const maxSlotIndex = (booking.data.duration * 2) - 1;
+        const slotIndex = Math.max(0, Math.min(maxSlotIndex, Math.floor(relativeY / slotHeight)));
+        const targetTime = booking.start + (slotIndex * 0.5);
+        
+        // Create or update floating tooltip
+        const tooltipText = `${formatTime(targetTime)} - ${formatTime(targetTime + 0.5)}`;
+        if (!dragState.tooltipElement) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'drag-tooltip';
+            document.body.appendChild(tooltip);
+            dragState.tooltipElement = tooltip;
+        }
+        dragState.tooltipElement.innerText = tooltipText;
+        dragState.tooltipElement.style.left = (rect.left + rect.width / 2 - dragState.tooltipElement.offsetWidth / 2) + 'px';
+        dragState.tooltipElement.style.top = (rect.top - 35) + 'px';
+        
+        // Create or update slot highlight
+        if (!dragState.highlightElement) {
+            const highlight = document.createElement('div');
+            highlight.className = 'drag-slot-highlight';
+            document.body.appendChild(highlight);
+            dragState.highlightElement = highlight;
+        }
+        
+        // Position highlight over the specific slot
+        const highlightTop = rect.top + (slotIndex * slotHeight);
+        dragState.highlightElement.style.left = rect.left + 'px';
+        dragState.highlightElement.style.top = highlightTop + 'px';
+        dragState.highlightElement.style.width = rect.width + 'px';
+        dragState.highlightElement.style.height = slotHeight + 'px';
+        
+        // If dragging over a different booking, always invalid
+        if (booking.id !== dragState.sourceId) {
+            dragState.highlightElement.classList.add('invalid');
+            e.dataTransfer.dropEffect = 'none';
+            dragState.lastInvalidReason = "Cannot drop onto another booking.";
+            dragState.wasOverValidTarget = false;
+            return;
+        }
+        
+        // Build virtual target slot ID
+        let virtualTargetId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${targetTime}`;
+        if (col.subIndex !== null) virtualTargetId += `_${col.subIndex}`;
+        
+        // Check if same slot
+        if (isSameSlot(dragState.sourceId, virtualTargetId)) {
+            dragState.highlightElement.classList.add('invalid');
+            e.dataTransfer.dropEffect = 'none';
+            dragState.lastInvalidReason = null; // Same slot is not an error
+            dragState.wasOverValidTarget = false;
+            return;
+        }
+        
+        // Validate the virtual target
+        const validation = validateDropTarget(virtualTargetId);
+        
+        if (validation.valid) {
+            dragState.highlightElement.classList.remove('invalid');
+            e.dataTransfer.dropEffect = 'move';
+            dragState.lastInvalidReason = null;
+            dragState.wasOverValidTarget = true;
+        } else {
+            dragState.highlightElement.classList.add('invalid');
+            e.dataTransfer.dropEffect = 'none';
+            dragState.lastInvalidReason = validation.reason;
+            dragState.wasOverValidTarget = false;
+        }
+    }
+
+    function handleBookedSlotDrop(e, booking, col, res, activeWeekKey) {
+        e.preventDefault();
+        
+        const slot = e.currentTarget;
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
+        slot.removeAttribute('data-time');
+        
+        // Clean up floating tooltip and highlight
+        if (dragState.tooltipElement) {
+            dragState.tooltipElement.remove();
+            dragState.tooltipElement = null;
+        }
+        if (dragState.highlightElement) {
+            dragState.highlightElement.remove();
+            dragState.highlightElement = null;
+        }
+        
+        if (!dragState.isDragging || !dragState.sourceId) return;
+        
+        // Only allow dropping on your own booking
+        if (booking.id !== dragState.sourceId) {
+            showToast("Cannot drop onto another booking.", "error");
+            return;
+        }
+        
+        // Calculate target time based on mouse position
+        const targetTime = getTimeSlotFromPosition(e, booking.start, booking.data.duration);
+        
+        // Build virtual target slot ID
+        let virtualTargetId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${targetTime}`;
+        if (col.subIndex !== null) virtualTargetId += `_${col.subIndex}`;
+        
+        // Check for same-slot drop
+        if (isSameSlot(dragState.sourceId, virtualTargetId)) {
+            return;
+        }
+        
+        // Validate the drop target
+        const validation = validateDropTarget(virtualTargetId);
+        
+        if (!validation.valid) {
+            showToast(validation.reason, "error");
+            return;
+        }
+        
+        // Show confirmation modal
+        showMoveConfirmation(dragState.sourceId, virtualTargetId, dragState.sourceData);
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        
+        const slot = e.currentTarget;
+        slot.classList.remove('drag-over-valid', 'drag-over-invalid');
+        
+        if (!dragState.isDragging || !dragState.sourceId) return;
+        
+        const targetSlotId = slot.dataset.slotId;
+        
+        // Check for same-slot drop
+        if (isSameSlot(dragState.sourceId, targetSlotId)) {
+            // Do nothing for same-slot drops
+            return;
+        }
+        
+        // Validate the drop target
+        const validation = validateDropTarget(targetSlotId);
+        
+        if (!validation.valid) {
+            showToast(validation.reason, 'error');
+            return;
+        }
+        
+        // Show confirmation modal
+        showMoveConfirmation(dragState.sourceId, targetSlotId, dragState.sourceData);
+    }
+
+    function isSameSlot(sourceId, targetId) {
+        const res = resources.find(r => r.id === currentResId);
+        const prefix = res.id + "_";
+        
+        const sourceSuffix = sourceId.substring(prefix.length);
+        const targetSuffix = targetId.substring(prefix.length);
+        
+        const sourceParts = sourceSuffix.split('_');
+        const targetParts = targetSuffix.split('_');
+        
+        const sourceDay = parseInt(sourceParts[1]);
+        const sourceTime = parseFloat(sourceParts[2]);
+        const sourceSubRaw = sourceParts[3];
+        const sourceSub = normalizeSubIndex(sourceSubRaw);
+        
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
+        const targetSubRaw = targetParts[3];
+        const targetSub = normalizeSubIndex(targetSubRaw);
+        
+        return sourceDay === targetDay && 
+               sourceTime === targetTime && 
+               sourceSub === targetSub;
+    }
+
+    function normalizeSubIndex(val) {
+        if (val === null || val === undefined || val === '' || val === 'null' || val === 'undefined') {
+            return null;
+        }
+        return parseInt(val);
+    }
+
+    function validateDropTarget(targetSlotId) {
+        const res = resources.find(r => r.id === currentResId);
+        const prefix = res.id + "_";
+        const isDayView = res.viewMode === 'day';
+        
+        // Parse target slot ID
+        const targetSuffix = targetSlotId.substring(prefix.length);
+        const targetParts = targetSuffix.split('_');
+        const targetWeekKey = targetParts[0];
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
+        const targetSubRaw = targetParts[3];
+        const targetSub = normalizeSubIndex(targetSubRaw);
+        
+        // Parse source slot ID
+        const sourceSuffix = dragState.sourceId.substring(prefix.length);
+        const sourceParts = sourceSuffix.split('_');
+        const sourceWeekKey = sourceParts[0];
+        
+        // Check week boundaries
+        if (sourceWeekKey !== targetWeekKey) {
+            return { valid: false, reason: "Cannot move booking to a different week." };
+        }
+        
+        // Check for closure date
+        const targetDate = new Date(currentWeekStart);
+        targetDate.setDate(targetDate.getDate() + targetDay);
+        const closureReason = getClosureReason(res, targetDate);
+        if (closureReason) {
+            return { valid: false, reason: `Closed: ${closureReason}` };
+        }
+        
+        // Get operating hours for target day
+        const dayStart = res.hours[targetDay * 2];
+        const dayEnd = res.hours[(targetDay * 2) + 1];
+        
+        // Check if slot is within operating hours
+        if (targetTime < dayStart || targetTime >= dayEnd || dayStart === dayEnd) {
+            return { valid: false, reason: "Target slot is outside operating hours." };
+        }
+        
+        // Check if booking duration fits before closing
+        const duration = dragState.sourceData.duration;
+        const bookingEnd = targetTime + duration;
+        if (bookingEnd > dayEnd) {
+            return { valid: false, reason: "Booking duration exceeds closing time." };
+        }
+        
+        // Check for conflicts with existing bookings
+        const activeWeekKey = getWeekKey(isDayView ? currentDayDate : currentWeekStart);
+        
+        for (const key of Object.keys(allBookings)) {
+            // Skip the booking we're moving
+            if (key === dragState.sourceId) continue;
+            
+            // Only check bookings for the same resource and week
+            if (!key.startsWith(res.id + "_" + activeWeekKey)) continue;
+            
+            const kSuffix = key.substring(prefix.length);
+            const kParts = kSuffix.split('_');
+            const kDay = parseInt(kParts[1]);
+            const kTime = parseFloat(kParts[2]);
+            const kSubRaw = kParts[3];
+            const kSub = normalizeSubIndex(kSubRaw);
+            
+            // Only check same column (same day and sub-room)
+            if (kDay !== targetDay) continue;
+            if (kSub !== targetSub) continue;
+            
+            const kDuration = allBookings[key].duration;
+            const kEnd = kTime + kDuration;
+            
+            // Check for overlap
+            if (targetTime < kEnd && bookingEnd > kTime) {
+                return { valid: false, reason: "Conflicts with existing booking." };
+            }
+        }
+        
+        return { valid: true };
+    }
+
+    function showMoveConfirmation(sourceId, targetId, bookingData) {
+        const res = resources.find(r => r.id === currentResId);
+        const prefix = res.id + "_";
+        const isDayView = res.viewMode === 'day';
+        
+        // Parse source
+        const sourceSuffix = sourceId.substring(prefix.length);
+        const sourceParts = sourceSuffix.split('_');
+        const sourceDay = parseInt(sourceParts[1]);
+        const sourceTime = parseFloat(sourceParts[2]);
+        
+        // Parse target
+        const targetSuffix = targetId.substring(prefix.length);
+        const targetParts = targetSuffix.split('_');
+        const targetDay = parseInt(targetParts[1]);
+        const targetTime = parseFloat(targetParts[2]);
+        
+        const duration = bookingData.duration;
+        
+        // Get day names and dates
+        let sourceDate, targetDate;
+        if (isDayView) {
+            sourceDate = new Date(currentDayDate);
+            targetDate = new Date(currentDayDate);
+        } else {
+            sourceDate = new Date(currentWeekStart);
+            sourceDate.setDate(sourceDate.getDate() + sourceDay);
+            targetDate = new Date(currentWeekStart);
+            targetDate.setDate(targetDate.getDate() + targetDay);
+        }
+        
+        const sourceDayName = DAYS[sourceDay];
+        const targetDayName = DAYS[targetDay];
+        
+        const sourceFormatted = `${sourceDayName} ${sourceDate.getMonth()+1}/${sourceDate.getDate()}, ${formatTime(sourceTime)} - ${formatTime(sourceTime + duration)}`;
+        const targetFormatted = `${targetDayName} ${targetDate.getMonth()+1}/${targetDate.getDate()}, ${formatTime(targetTime)} - ${formatTime(targetTime + duration)}`;
+        
+        // Populate modal
+        document.getElementById('moveSourceId').value = sourceId;
+        document.getElementById('moveTargetId').value = targetId;
+        document.getElementById('movePatronName').innerText = bookingData.name;
+        document.getElementById('moveFromTime').innerText = sourceFormatted;
+        document.getElementById('moveToTime').innerText = targetFormatted;
+        
+        // Show modal
+        document.getElementById('moveModal').style.display = 'flex';
+    }
+
+    // --- DRAG-TO-CREATE HANDLERS ---
+    function startSelection(e, slotId, timeVal, col, res, activeWeekKey, slotElement) {
+        // Only start on left click, not during other operations
+        if (e.button !== 0) return;
+        if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
+        if (resizeJustEnded) return;
+        
+        e.preventDefault();
+        
+        // Calculate max duration based on closing time and collisions
+        const dayEnd = res.hours[(col.dayIndex * 2) + 1];
+        const maxByClose = dayEnd - timeVal;
+        const maxByResource = res.maxDuration;
+        
+        // Find next booking in same column
+        let nextBookingStart = dayEnd;
+        const prefix = res.id + "_";
+        Object.keys(allBookings).forEach(key => {
+            if (!key.startsWith(prefix + activeWeekKey)) return;
+            
+            const kSuffix = key.substring(prefix.length);
+            const kParts = kSuffix.split('_');
+            const kDay = parseInt(kParts[1]);
+            const kTime = parseFloat(kParts[2]);
+            const kSubRaw = kParts[3];
+            const kSub = normalizeSubIndex(kSubRaw);
+            
+            if (kDay !== col.dayIndex) return;
+            if (kSub !== normalizeSubIndex(col.subIndex)) return;
+            
+            if (kTime >= timeVal && kTime < nextBookingStart) {
+                nextBookingStart = kTime;
+            }
+        });
+        
+        const maxByCollision = nextBookingStart - timeVal;
+        const maxDuration = Math.min(maxByClose, maxByResource, maxByCollision);
+        
+        if (maxDuration < 0.5) return;
+        
+        const rect = slotElement.getBoundingClientRect();
+        
+        // Build array of time cell positions for accurate slot detection
+        const container = document.getElementById('gridContainer');
+        const timeCells = Array.from(container.querySelectorAll('.time-cell'));
+        const slotPositions = timeCells.map(cell => {
+            const cellRect = cell.getBoundingClientRect();
+            return { top: cellRect.top, bottom: cellRect.bottom, height: cellRect.height };
+        });
+        
+        selectionState = {
+            active: true,
+            startSlotId: slotId,
+            startTime: timeVal,
+            startDayIndex: col.dayIndex,
+            subIndex: col.subIndex,
+            startY: e.clientY,
+            startSlotIndex: 0, // which slot we started in
+            slotPositions: slotPositions,
+            maxDuration: maxDuration,
+            currentDuration: 0.5,
+            res: res,
+            activeWeekKey: activeWeekKey,
+            startSlotRect: rect,
+            overlayElement: null,
+            tooltipElement: null
+        };
+        
+        // Find which slot index we're starting in
+        for (let i = 0; i < slotPositions.length; i++) {
+            if (e.clientY >= slotPositions[i].top && e.clientY < slotPositions[i].bottom) {
+                selectionState.startSlotIndex = i;
+                break;
+            }
+        }
+        
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'selection-overlay';
+        overlay.style.left = rect.left + 'px';
+        overlay.style.top = slotPositions[selectionState.startSlotIndex].top + 'px';
+        overlay.style.width = rect.width + 'px';
+        overlay.style.height = slotPositions[selectionState.startSlotIndex].height + 'px';
+        document.body.appendChild(overlay);
+        selectionState.overlayElement = overlay;
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'selection-tooltip';
+        tooltip.innerText = `${formatTime(timeVal)} - ${formatTime(timeVal + 0.5)} (0.5h)`;
+        tooltip.style.left = (rect.right + 10) + 'px';
+        tooltip.style.top = rect.top + 'px';
+        document.body.appendChild(tooltip);
+        selectionState.tooltipElement = tooltip;
+        
+        document.addEventListener('mousemove', doSelection);
+        document.addEventListener('mouseup', endSelection);
+    }
+    
+    function doSelection(e) {
+        if (!selectionState.active) return;
+        
+        const positions = selectionState.slotPositions;
+        const startIdx = selectionState.startSlotIndex;
+        
+        // Find which slot the mouse is currently over
+        let currentSlotIndex = startIdx;
+        for (let i = startIdx; i < positions.length; i++) {
+            if (e.clientY >= positions[i].top && e.clientY < positions[i].bottom) {
+                currentSlotIndex = i;
+                break;
+            }
+            // If mouse is below this slot, keep going
+            if (e.clientY >= positions[i].bottom) {
+                currentSlotIndex = i;
+            }
+        }
+        
+        // Calculate duration based on slots covered
+        const slotsCovered = currentSlotIndex - startIdx + 1;
+        let newDuration = slotsCovered * 0.5;
+        newDuration = Math.max(0.5, Math.min(selectionState.maxDuration, newDuration));
+        
+        selectionState.currentDuration = newDuration;
+        
+        // Update overlay to span from start slot to current slot
+        if (selectionState.overlayElement && positions[startIdx]) {
+            const endIdx = startIdx + (newDuration * 2) - 1;
+            const clampedEndIdx = Math.min(endIdx, positions.length - 1);
+            const startTop = positions[startIdx].top;
+            const endBottom = positions[clampedEndIdx].bottom;
+            
+            selectionState.overlayElement.style.top = startTop + 'px';
+            selectionState.overlayElement.style.height = (endBottom - startTop) + 'px';
+        }
+        
+        if (selectionState.tooltipElement) {
+            const endTime = selectionState.startTime + newDuration;
+            selectionState.tooltipElement.innerText = `${formatTime(selectionState.startTime)} - ${formatTime(endTime)} (${newDuration}h)`;
+        }
+    }
+    
+    function endSelection(e) {
+        if (!selectionState.active) return;
+        
+        document.removeEventListener('mousemove', doSelection);
+        document.removeEventListener('mouseup', endSelection);
+        
+        if (selectionState.overlayElement) {
+            selectionState.overlayElement.remove();
+        }
+        if (selectionState.tooltipElement) {
+            selectionState.tooltipElement.remove();
+        }
+        
+        const duration = selectionState.currentDuration;
+        const slotId = selectionState.startSlotId;
+        const subIndex = selectionState.subIndex;
+        
+        selectionState = {
+            active: false,
+            startSlotId: null,
+            startTime: 0,
+            startDayIndex: 0,
+            subIndex: null,
+            startY: 0,
+            slotHeight: 0,
+            maxDuration: 0,
+            currentDuration: 0.5,
+            res: null,
+            activeWeekKey: null,
+            startSlotRect: null,
+            overlayElement: null,
+            tooltipElement: null
+        };
+        
+        openBookingModalWithDuration(slotId, subIndex, duration);
+    }
+    
+    function openBookingModalWithDuration(slotId, subIndex, presetDuration) {
+        const modal = document.getElementById('bookingModal');
+        const res = resources.find(r => r.id === currentResId);
+        
+        const prefix = res.id + "_";
+        const suffix = slotId.substring(prefix.length);
+        const parts = suffix.split('_');
+        const dayIdx = parseInt(parts[1]);
+        const start = parseFloat(parts[2]);
+        
+        document.getElementById('subRoomIndex').value = (subIndex !== null && subIndex !== undefined) ? subIndex : '';
+
+        const dayEnd = res.hours[(dayIdx * 2) + 1];
+        const activeWeekKey = parts[0];
+        const currentSubIdx = document.getElementById('subRoomIndex').value;
+        let conflictingStarts = [];
+        
+        Object.keys(allBookings).forEach(k => {
+            if (k.startsWith(res.id + "_" + activeWeekKey) && k !== slotId) {
+                const pSuffix = k.substring(prefix.length);
+                const p = pSuffix.split('_');
+                const bDay = parseInt(p[1]);
+                const bStart = parseFloat(p[2]);
+                const bSub = p[3];
+                
+                if (bDay === dayIdx) {
+                    const subMatch = (bSub == currentSubIdx) || (!bSub && !currentSubIdx);
+                    if (subMatch) { if (bStart > start) conflictingStarts.push(bStart); }
+                }
+            }
+        });
+        
+        conflictingStarts.sort((a,b) => a - b);
+        const nextStart = conflictingStarts.length > 0 ? conflictingStarts[0] : dayEnd;
+        const maxAvailable = nextStart - start;
+        const limit = Math.min(maxAvailable, res.maxDuration);
+
+        document.getElementById('slotId').value = slotId;
+        document.getElementById('bookName').value = '';
+        document.getElementById('bookNotes').value = '';
+        document.getElementById('bookShowNotes').checked = res.defaultShowNotes || false;
+
+        const showStaff = res.hasStaffField;
+        document.getElementById('staffSection').style.display = showStaff ? 'block' : 'none';
+        document.getElementById('bookHasStaff').checked = false;
+        document.getElementById('bookStaffName').value = '';
+        toggleStaffInput();
+
+        const durSel = document.getElementById('bookDuration');
+        durSel.innerHTML = '';
+        const maxIterations = res.maxDuration * 2;
+        for (let i = 1; i <= maxIterations; i++) {
+            const val = i * 0.5;
+            if (val > limit) continue;
+            const opt = document.createElement('option');
+            opt.value = val;
+            const endVal = start + val;
+            opt.innerText = `${val} ${val === 1 ? "Hour" : "Hours"} (${formatTime(start)} - ${formatTime(endVal)})`;
+            if (val === presetDuration) opt.selected = true;
+            durSel.appendChild(opt);
+        }
+        if (durSel.options.length === 0) {
+            const opt = document.createElement('option');
+            opt.innerText = "No time available";
+            durSel.appendChild(opt);
+        }
+        
+        modal.style.display = 'flex';
+        document.getElementById('bookName').focus();
+    }
+
+    function cancelMove() {
+        closeModal('moveModal');
+        // Clear drag state on cancel
+        dragState.sourceId = null;
+        dragState.sourceData = null;
+    }
+
+    // --- RESIZE HANDLERS ---
+    function startResize(e, booking, col, res, activeWeekKey, slotElement) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Block if saving or another operation is active
+        if (dragState.isSaving || dragState.isDragging || resizeState.active || selectionState.active) return;
+        
+        // Hide any open popover
+        hideBookingPopover();
+        
+        // Calculate max duration based on closing time and collisions
+        const dayEnd = res.hours[(col.dayIndex * 2) + 1];
+        const maxByClose = dayEnd - booking.start;
+        const maxByResource = res.maxDuration;
+        
+        // Find next booking in same column
+        let nextBookingStart = dayEnd;
+        const prefix = res.id + "_";
+        Object.keys(allBookings).forEach(key => {
+            if (key === booking.id) return;
+            if (!key.startsWith(prefix + activeWeekKey)) return;
+            
+            const kSuffix = key.substring(prefix.length);
+            const kParts = kSuffix.split('_');
+            const kDay = parseInt(kParts[1]);
+            const kTime = parseFloat(kParts[2]);
+            const kSubRaw = kParts[3];
+            const kSub = normalizeSubIndex(kSubRaw);
+            
+            if (kDay !== col.dayIndex) return;
+            if (kSub !== normalizeSubIndex(col.subIndex)) return;
+            
+            // Only consider bookings that start after this one
+            if (kTime > booking.start && kTime < nextBookingStart) {
+                nextBookingStart = kTime;
+            }
+        });
+        
+        const maxByCollision = nextBookingStart - booking.start;
+        const maxDuration = Math.min(maxByClose, maxByResource, maxByCollision);
+        
+        const rect = slotElement.getBoundingClientRect();
+        
+        // Build array of time cell positions for accurate slot detection
+        const container = document.getElementById('gridContainer');
+        const timeCells = Array.from(container.querySelectorAll('.time-cell'));
+        const slotPositions = timeCells.map(cell => {
+            const cellRect = cell.getBoundingClientRect();
+            return { top: cellRect.top, bottom: cellRect.bottom, height: cellRect.height };
+        });
+        
+        // Find which slot index the booking starts in
+        let startSlotIndex = 0;
+        const bookingTopY = rect.top;
+        for (let i = 0; i < slotPositions.length; i++) {
+            if (bookingTopY >= slotPositions[i].top && bookingTopY < slotPositions[i].bottom) {
+                startSlotIndex = i;
+                break;
+            }
+            if (bookingTopY >= slotPositions[i].top) {
+                startSlotIndex = i;
+            }
+        }
+        
+        resizeState = {
+            active: true,
+            bookingId: booking.id,
+            bookingData: booking.data,
+            bookingStart: booking.start,
+            col: col,
+            res: res,
+            activeWeekKey: activeWeekKey,
+            startY: e.clientY,
+            startSlotIndex: startSlotIndex,
+            slotPositions: slotPositions,
+            slotHeight: slotPositions.length > 0 ? slotPositions[0].height : 30,
+            originalDuration: booking.data.duration,
+            currentDuration: booking.data.duration,
+            minDuration: 0.5,
+            maxDuration: maxDuration,
+            originalRect: rect,
+            overlayElement: null,
+            tooltipElement: null
+        };
+        
+        // Create overlay spanning the correct slots
+        const endSlotIndex = startSlotIndex + (booking.data.duration * 2) - 1;
+        const clampedEndIdx = Math.min(endSlotIndex, slotPositions.length - 1);
+        const overlayTop = slotPositions[startSlotIndex].top;
+        const overlayBottom = slotPositions[clampedEndIdx].bottom;
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'resize-overlay';
+        overlay.style.left = rect.left + 'px';
+        overlay.style.top = overlayTop + 'px';
+        overlay.style.width = rect.width + 'px';
+        overlay.style.height = (overlayBottom - overlayTop) + 'px';
+        document.body.appendChild(overlay);
+        resizeState.overlayElement = overlay;
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'resize-tooltip';
+        tooltip.innerText = `${formatTime(booking.start)} - ${formatTime(booking.start + booking.data.duration)} (${booking.data.duration}h)`;
+        tooltip.style.left = (rect.right + 10) + 'px';
+        tooltip.style.top = rect.top + 'px';
+        document.body.appendChild(tooltip);
+        resizeState.tooltipElement = tooltip;
+        
+        document.addEventListener('mousemove', doResize);
+        document.addEventListener('mouseup', endResize);
+    }
+    
+    function doResize(e) {
+        if (!resizeState.active) return;
+        
+        const deltaY = e.clientY - resizeState.startY;
+        const slotsDelta = Math.round(deltaY / resizeState.slotHeight);
+        const durationDelta = slotsDelta * 0.5;
+        
+        let newDuration = resizeState.originalDuration + durationDelta;
+        newDuration = Math.max(resizeState.minDuration, Math.min(resizeState.maxDuration, newDuration));
+        newDuration = Math.round(newDuration * 2) / 2;
+        
+        resizeState.currentDuration = newDuration;
+        
+        // Update overlay height (not the actual grid element)
+        if (resizeState.overlayElement) {
+            const newHeight = resizeState.slotHeight * (newDuration * 2);
+            resizeState.overlayElement.style.height = newHeight + 'px';
+        }
+        
+        // Update tooltip
+        if (resizeState.tooltipElement) {
+            const newEndTime = resizeState.bookingStart + newDuration;
+            resizeState.tooltipElement.innerText = `${formatTime(resizeState.bookingStart)} - ${formatTime(newEndTime)} (${newDuration}h)`;
+        }
+    }
+    
+    async function endResize(e) {
+        if (!resizeState.active) return;
+        
+        document.removeEventListener('mousemove', doResize);
+        document.removeEventListener('mouseup', endResize);
+        
+        // Set flag to prevent accidental clicks, clear after event loop settles
+        resizeJustEnded = true;
+        setTimeout(() => { resizeJustEnded = false; }, 100);
+        
+        // Clean up overlay and tooltip
+        if (resizeState.overlayElement) {
+            resizeState.overlayElement.remove();
+        }
+        if (resizeState.tooltipElement) {
+            resizeState.tooltipElement.remove();
+        }
+        
+        const newDuration = resizeState.currentDuration;
+        const originalDuration = resizeState.originalDuration;
+        
+        // Only show confirmation if duration actually changed
+        if (newDuration !== originalDuration) {
+            showResizeConfirmation(
+                resizeState.bookingId,
+                resizeState.bookingData,
+                resizeState.bookingStart,
+                originalDuration,
+                newDuration
+            );
+        }
+        
+        // Reset state
+        resizeState = {
+            active: false,
+            bookingId: null,
+            bookingData: null,
+            bookingStart: 0,
+            col: null,
+            res: null,
+            activeWeekKey: null,
+            startY: 0,
+            slotHeight: 0,
+            originalDuration: 0,
+            currentDuration: 0,
+            minDuration: 0.5,
+            maxDuration: 0,
+            originalRect: null,
+            overlayElement: null,
+            tooltipElement: null
+        };
+    }
+
+    function showResizeConfirmation(bookingId, bookingData, bookingStart, oldDuration, newDuration) {
+        document.getElementById('resizeBookingId').value = bookingId;
+        document.getElementById('resizeNewDuration').value = newDuration;
+        document.getElementById('resizePatronName').innerText = bookingData.name;
+        
+        const oldEnd = bookingStart + oldDuration;
+        const newEnd = bookingStart + newDuration;
+        
+        document.getElementById('resizeFromDuration').innerText = 
+            `${formatTime(bookingStart)} - ${formatTime(oldEnd)} (${oldDuration} hour${oldDuration === 1 ? '' : 's'})`;
+        document.getElementById('resizeToDuration').innerText = 
+            `${formatTime(bookingStart)} - ${formatTime(newEnd)} (${newDuration} hour${newDuration === 1 ? '' : 's'})`;
+        
+        // Store booking data for the execute function
+        document.getElementById('resizeModal').dataset.bookingData = JSON.stringify(bookingData);
+        
+        document.getElementById('resizeModal').style.display = 'flex';
+    }
+
+    function cancelResize() {
+        closeModal('resizeModal');
+    }
+
+    async function executeResize() {
+        if (dragState.isSaving) return;
+        
+        const bookingId = document.getElementById('resizeBookingId').value;
+        const newDuration = parseFloat(document.getElementById('resizeNewDuration').value);
+        const bookingData = JSON.parse(document.getElementById('resizeModal').dataset.bookingData);
+        
+        if (!bookingId || !bookingData) {
+            showToast("Invalid booking data.", "error");
+            closeModal('resizeModal');
+            return;
+        }
+        
+        dragState.isSaving = true;
+        showLoading(true);
+        closeModal('resizeModal');
+        
+        try {
+            const updatedData = { ...bookingData, duration: newDuration };
+            await db.collection('appointments').doc(bookingId).set(updatedData);
+            showToast(`Duration updated to ${newDuration} hour${newDuration === 1 ? '' : 's'}`, 'success');
+        } catch (error) {
+            console.error("Resize error:", error);
+            showToast("Failed to update duration: " + error.message, "error");
+        } finally {
+            dragState.isSaving = false;
+            showLoading(false);
+        }
+    }
+
+    async function executeMoveBooking() {
+        if (dragState.isSaving) return;
+        
+        const sourceId = document.getElementById('moveSourceId').value;
+        const targetId = document.getElementById('moveTargetId').value;
+        
+        if (!sourceId || !targetId || !allBookings[sourceId]) {
+            showToast("Invalid booking data.", "error");
+            closeModal('moveModal');
+            return;
+        }
+        
+        dragState.isSaving = true;
+        showLoading(true);
+        closeModal('moveModal');
+        
+        try {
+            // Copy booking data
+            const bookingData = { ...allBookings[sourceId] };
+            
+            // Use batch write for atomic operation
+            const batch = db.batch();
+            
+            // Delete old document
+            const oldRef = db.collection('appointments').doc(sourceId);
+            batch.delete(oldRef);
+            
+            // Create new document with same data
+            const newRef = db.collection('appointments').doc(targetId);
+            batch.set(newRef, bookingData);
+            
+            await batch.commit();
+            
+            showToast("Booking moved successfully!", "success");
+        } catch (error) {
+            console.error("Move error:", error);
+            showToast("Failed to move booking: " + error.message, "error");
+        } finally {
+            dragState.isSaving = false;
+            dragState.sourceId = null;
+            dragState.sourceData = null;
+            showLoading(false);
         }
     }
 
@@ -924,11 +2570,10 @@ const firebaseConfig = {
         document.getElementById('editSubRooms').value = r.subRooms || '';
         document.getElementById('editDefaultShowNotes').checked = r.defaultShowNotes || false;
         
-        // --- NEW: Load Sidebar Settings ---
+        // Load Sidebar Settings
         document.getElementById('editEnableSidebar').checked = r.enableSidebar || false;
         document.getElementById('editSidebarText').value = r.sidebarText || '';
-        toggleSidebarConfig(); // show/hide the text box
-        // ----------------------------------
+        toggleSidebarConfig();
 
         toggleSubRoomInput();
         const container = document.getElementById('daysConfigContainer');
@@ -937,38 +2582,337 @@ const firebaseConfig = {
             const start = r.hours[i*2];
             const end = r.hours[(i*2)+1];
             container.innerHTML += `<div class="day-box"><strong>${d}</strong><input type="number" id="s_${i}" value="${start}" min="0" max="24" step="0.5"><input type="number" id="e_${i}" value="${end}" min="0" max="24" step="0.5"></div>`;
-            });
+        });
+        
+        // Load Closure Dates
+        renderClosureList(r);
     }
     
     function toggleSubRoomInput() { const mode = document.getElementById('editViewMode').value; const container = document.getElementById('subRoomConfig'); if (mode === 'day') { container.classList.remove('hidden'); } else { container.classList.add('hidden'); } }
 
-    // --- NEW: Toggle Sidebar Input Helper ---
     function toggleSidebarConfig() {
         const isEnabled = document.getElementById('editEnableSidebar').checked;
         const container = document.getElementById('sidebarTextConfig');
         if (isEnabled) container.classList.remove('hidden');
         else container.classList.add('hidden');
     }
-    
+
+    // --- CLOSURE DATE MANAGEMENT ---
+    function renderClosureList(res) {
+        const container = document.getElementById('closureList');
+        const closures = res.closureDates || [];
+        
+        if (closures.length === 0) {
+            container.innerHTML = '<div class="closure-empty">No closure dates set</div>';
+            return;
+        }
+        
+        // Sort by start date
+        const sorted = [...closures].sort((a, b) => a.date.localeCompare(b.date));
+        
+        container.innerHTML = sorted.map((c, idx) => {
+            const startDate = new Date(c.date + 'T00:00');
+            const startFormatted = startDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            
+            let dateDisplay;
+            if (c.endDate && c.endDate !== c.date) {
+                const endDate = new Date(c.endDate + 'T00:00');
+                const endFormatted = endDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                dateDisplay = `${startFormatted} → ${endFormatted}`;
+            } else {
+                dateDisplay = startFormatted;
+            }
+            
+            // Use start date as unique identifier, include end date if present
+            const removeKey = c.endDate ? `${c.date}|${c.endDate}` : c.date;
+            
+            return `
+                <div class="closure-item">
+                    <div class="closure-item-info">
+                        <span class="closure-item-date">${dateDisplay}</span>
+                        <span class="closure-item-reason">${escapeHtml(c.reason || 'No reason specified')}</span>
+                    </div>
+                    <button class="btn-danger" onclick="removeClosureDate('${removeKey}')">Remove</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function addClosureDate() {
+        const dateInput = document.getElementById('newClosureDate');
+        const endDateInput = document.getElementById('newClosureEndDate');
+        const reasonInput = document.getElementById('newClosureReason');
+        
+        const startDate = dateInput.value;
+        const endDate = endDateInput.value;
+        const reason = reasonInput.value.trim();
+        
+        if (!startDate) {
+            showToast("Please select a start date.", "error");
+            return;
+        }
+        
+        // Validate end date is after start date if provided
+        if (endDate && endDate < startDate) {
+            showToast("End date must be on or after start date.", "error");
+            return;
+        }
+        
+        const editId = document.getElementById('settingResSelect').value;
+        const r = resources.find(x => x.id === editId);
+        if (!r) return;
+        
+        // Initialize array if needed
+        if (!r.closureDates) r.closureDates = [];
+        
+        // Check for overlapping closures
+        const newStart = startDate;
+        const newEnd = endDate || startDate;
+        
+        const hasOverlap = r.closureDates.some(c => {
+            const existingStart = c.date;
+            const existingEnd = c.endDate || c.date;
+            // Check if ranges overlap
+            return newStart <= existingEnd && newEnd >= existingStart;
+        });
+        
+        if (hasOverlap) {
+            showToast("This date range overlaps with an existing closure.", "error");
+            return;
+        }
+        
+        const closureEntry = { 
+            date: startDate, 
+            reason: reason || 'Closed' 
+        };
+        
+        // Only add endDate if it's different from start (making it a range)
+        if (endDate && endDate !== startDate) {
+            closureEntry.endDate = endDate;
+        }
+        
+        r.closureDates.push(closureEntry);
+        
+        // Clear inputs
+        dateInput.value = '';
+        endDateInput.value = '';
+        reasonInput.value = '';
+        
+        // Re-render
+        renderClosureList(r);
+        showToast("Closure date added. Remember to save changes.", "success");
+    }
+
+    function removeClosureDate(key) {
+        const editId = document.getElementById('settingResSelect').value;
+        const r = resources.find(x => x.id === editId);
+        if (!r || !r.closureDates) return;
+        
+        // Key format is either "date" for single day or "date|endDate" for ranges
+        const parts = key.split('|');
+        const startDate = parts[0];
+        const endDate = parts[1] || null;
+        
+        r.closureDates = r.closureDates.filter(c => {
+            if (endDate) {
+                // Match range closure
+                return !(c.date === startDate && c.endDate === endDate);
+            } else {
+                // Match single day closure (no endDate)
+                return !(c.date === startDate && !c.endDate);
+            }
+        });
+        
+        renderClosureList(r);
+        showToast("Closure date removed. Remember to save changes.", "success");
+    }
+
+    async function applyClosuresToAllResources() {
+        const editId = document.getElementById('settingResSelect').value;
+        const sourceRes = resources.find(x => x.id === editId);
+        if (!sourceRes) return;
+        
+        const closures = sourceRes.closureDates || [];
+        if (closures.length === 0) {
+            showToast("No closure dates to apply.", "error");
+            return;
+        }
+        
+        if (!confirm(`Apply ${closures.length} closure date(s) to ALL other resources? This will merge with their existing closures.`)) {
+            return;
+        }
+        
+        // Apply to all other resources
+        resources.forEach(r => {
+            if (r.id === editId) return; // Skip source
+            
+            if (!r.closureDates) r.closureDates = [];
+            
+            closures.forEach(c => {
+                // Only add if not already present
+                if (!r.closureDates.some(existing => existing.date === c.date)) {
+                    r.closureDates.push({ ...c });
+                }
+            });
+        });
+        
+        // Save all resources
+        showLoading(true);
+        try {
+            await db.collection('system').doc('resources').set({ list: resources });
+            showToast(`Closure dates applied to ${resources.length - 1} other resource(s)!`, "success");
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+        showLoading(false);
+    }
+
+    async function applyHoursToAllResources() {
+        const editId = document.getElementById('settingResSelect').value;
+        const sourceRes = resources.find(x => x.id === editId);
+        if (!sourceRes) return;
+        
+        // Get current hours from the form inputs
+        const currentHours = [];
+        for (let i = 0; i < 7; i++) {
+            currentHours[i * 2] = parseFloat(document.getElementById(`s_${i}`).value) || 0;
+            currentHours[(i * 2) + 1] = parseFloat(document.getElementById(`e_${i}`).value) || 0;
+        }
+        
+        if (!confirm(`Apply these operating hours to ALL other resources? This will overwrite their existing hours.`)) {
+            return;
+        }
+        
+        // Apply to all other resources
+        resources.forEach(r => {
+            if (r.id === editId) return; // Skip source
+            r.hours = [...currentHours];
+        });
+        
+        // Save all resources
+        showLoading(true);
+        try {
+            await db.collection('system').doc('resources').set({ list: resources });
+            showToast(`Operating hours applied to ${resources.length - 1} other resource(s)!`, "success");
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+        showLoading(false);
+    }
+
+    // --- NEW RESOURCE WITH IMPORT OPTION ---
     async function addNewResource() {
         const name = prompt("Name for new resource?");
         if(!name) return;
+        
+        // If there are existing resources, show import options
+        if (resources.length > 0) {
+            // Show import modal
+            pendingNewResource = { 
+                id: 'res-' + Date.now(), 
+                name: name, 
+                viewMode: 'week', 
+                hasStaffField: false, 
+                defaultShowNotes: false, 
+                enableSidebar: false, 
+                sidebarText: "",
+                maxDuration: 2, 
+                hours: [...DEFAULT_HOURS],
+                closureDates: []
+            };
+            
+            // Populate closure dates dropdown
+            const closuresSelect = document.getElementById('importClosuresSource');
+            closuresSelect.innerHTML = '<option value="">-- No, start fresh --</option>';
+            const resourcesWithClosures = resources.filter(r => r.closureDates && r.closureDates.length > 0);
+            resourcesWithClosures.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.id;
+                opt.innerText = `${r.name} (${r.closureDates.length} closure dates)`;
+                closuresSelect.appendChild(opt);
+            });
+            
+            // Populate hours dropdown
+            const hoursSelect = document.getElementById('importHoursSource');
+            hoursSelect.innerHTML = '<option value="">-- Use default hours --</option>';
+            resources.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.id;
+                opt.innerText = r.name;
+                hoursSelect.appendChild(opt);
+            });
+            
+            document.getElementById('importClosuresModal').style.display = 'flex';
+        } else {
+            // No existing resources, create directly with defaults
+            showLoading(true);
+            const newRes = { 
+                id: 'res-' + Date.now(), 
+                name: name, 
+                viewMode: 'week', 
+                hasStaffField: false, 
+                defaultShowNotes: false, 
+                enableSidebar: false, 
+                sidebarText: "",
+                maxDuration: 2, 
+                hours: [...DEFAULT_HOURS],
+                closureDates: []
+            };
+            try { 
+                await db.collection('system').doc('resources').set({ list: [...resources, newRes] }); 
+                pendingSelectionId = newRes.id; 
+            } 
+            catch (e) { showToast("Error: " + e.message, "error"); }
+            showLoading(false);
+        }
+    }
+
+    async function confirmImportSettings() {
+        if (!pendingNewResource) return;
+        
+        const importClosuresFromId = document.getElementById('importClosuresSource').value;
+        const importHoursFromId = document.getElementById('importHoursSource').value;
+        
+        if (importClosuresFromId) {
+            const sourceRes = resources.find(r => r.id === importClosuresFromId);
+            if (sourceRes && sourceRes.closureDates) {
+                pendingNewResource.closureDates = [...sourceRes.closureDates];
+            }
+        }
+        
+        if (importHoursFromId) {
+            const sourceRes = resources.find(r => r.id === importHoursFromId);
+            if (sourceRes && sourceRes.hours) {
+                pendingNewResource.hours = [...sourceRes.hours];
+            }
+        }
+        
         showLoading(true);
-        // Added defaults for sidebar
-        const newRes = { 
-            id: 'res-' + Date.now(), 
-            name: name, 
-            viewMode: 'week', 
-            hasStaffField: false, 
-            defaultShowNotes: false, 
-            enableSidebar: false, 
-            sidebarText: "",
-            maxDuration: 2, 
-            hours: [...DEFAULT_HOURS] 
-        };
-        try { await db.collection('system').doc('resources').set({ list: [...resources, newRes] }); pendingSelectionId = newRes.id; } 
+        closeModal('importClosuresModal');
+        
+        try { 
+            await db.collection('system').doc('resources').set({ list: [...resources, pendingNewResource] }); 
+            pendingSelectionId = pendingNewResource.id;
+            const importedItems = [];
+            if (pendingNewResource.closureDates.length > 0) {
+                importedItems.push(`${pendingNewResource.closureDates.length} closure date(s)`);
+            }
+            if (importHoursFromId) {
+                importedItems.push('operating hours');
+            }
+            if (importedItems.length > 0) {
+                showToast(`Resource created with imported ${importedItems.join(' and ')}!`, "success");
+            }
+        } 
         catch (e) { showToast("Error: " + e.message, "error"); }
+        
+        pendingNewResource = null;
         showLoading(false);
+    }
+
+    function cancelImportSettings() {
+        pendingNewResource = null;
+        closeModal('importClosuresModal');
     }
     
     async function deleteResource() {
@@ -993,13 +2937,20 @@ const firebaseConfig = {
         target.subRooms = document.getElementById('editSubRooms').value;
         target.defaultShowNotes = document.getElementById('editDefaultShowNotes').checked;
 
-        // --- NEW: Save Sidebar Settings ---
+        // Save Sidebar Settings
         target.enableSidebar = document.getElementById('editEnableSidebar').checked;
         target.sidebarText = document.getElementById('editSidebarText').value;
+        
+        // Preserve closure dates from the in-memory resource (already updated by add/remove)
+        target.closureDates = r.closureDates || [];
 
         for(let i=0; i<7; i++) { target.hours[i*2] = parseFloat(document.getElementById(`s_${i}`).value) || 0; target.hours[(i*2)+1] = parseFloat(document.getElementById(`e_${i}`).value) || 0; }
         showLoading(true);
-        try { await db.collection('system').doc('resources').set({ list: updatedList }); showToast("Settings Saved!", "success"); } 
+        try { 
+            await db.collection('system').doc('resources').set({ list: updatedList }); 
+            showToast("Settings Saved!", "success"); 
+            closeModal('settingsOverlay');
+        } 
         catch (e) { showToast("Error: " + e.message, "error"); }
         showLoading(false);
     }
@@ -1015,13 +2966,77 @@ const firebaseConfig = {
         
         loadBookingsForCurrentView(); 
     }
-    function highlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
-    function unhighlightBooking(id) { document.querySelectorAll(`.slot[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
+    function highlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.add('booking-hover-effect')); }
+    function unhighlightBooking(id) { document.querySelectorAll(`[data-bid="${id}"]`).forEach(s => s.classList.remove('booking-hover-effect')); }
     
-    function deleteBooking() { 
+    // Popover for booking details
+    let activePopover = null;
+    
+    function showBookingPopover(e, booking) {
+        hideBookingPopover(); // Clear any existing
+        
+        const popover = document.createElement('div');
+        popover.className = 'booking-popover';
+        
+        let html = `<div class="popover-name">${escapeHtml(booking.data.name)}</div>`;
+        html += `<div class="popover-time">${formatTime(booking.start)} - ${formatTime(booking.end)} (${booking.data.duration}h)</div>`;
+        
+        if (booking.data.hasStaff && booking.data.staffName) {
+            html += `<div class="popover-staff">w/ ${escapeHtml(booking.data.staffName)}</div>`;
+        }
+        
+        if (booking.data.notes) {
+            html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+        }
+        
+        popover.innerHTML = html;
+        document.body.appendChild(popover);
+        activePopover = popover;
+        
+        updatePopoverPosition(e);
+    }
+    
+    function updatePopoverPosition(e) {
+        if (!activePopover) return;
+        
+        const padding = 12;
+        const popoverRect = activePopover.getBoundingClientRect();
+        
+        let left = e.clientX + padding;
+        let top = e.clientY + padding;
+        
+        // Keep within viewport
+        if (left + popoverRect.width > window.innerWidth) {
+            left = e.clientX - popoverRect.width - padding;
+        }
+        if (top + popoverRect.height > window.innerHeight) {
+            top = e.clientY - popoverRect.height - padding;
+        }
+        
+        activePopover.style.left = left + 'px';
+        activePopover.style.top = top + 'px';
+    }
+    
+    function hideBookingPopover() {
+        if (activePopover) {
+            activePopover.remove();
+            activePopover = null;
+        }
+    }
+    
+    async function deleteBooking() { 
         const slotId = document.getElementById('slotId').value;
         if(!allBookings[slotId]) return closeModal('bookingModal');
-        if(confirm("Delete booking?")) { showLoading(true); db.collection('appointments').doc(slotId).delete().then(()=>closeModal('bookingModal')); showLoading(false); }
+        if(confirm("Delete booking?")) { 
+            showLoading(true); 
+            try {
+                await db.collection('appointments').doc(slotId).delete();
+                closeModal('bookingModal');
+            } catch(e) {
+                showToast("Error deleting: " + e.message, "error");
+            }
+            showLoading(false); 
+        }
     }
     
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -1036,6 +3051,10 @@ const firebaseConfig = {
         return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
     }
     function formatDateShort(d) { return (d.getMonth()+1) + "/" + d.getDate(); }
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
     function formatTime(val) {
         const h = Math.floor(val);
         const m = (val % 1 === 0) ? '00' : '30';
@@ -1044,15 +3063,18 @@ const firebaseConfig = {
         return `${h12}:${m}${suffix}`;
     }
 
+    // Re-render grid on window resize (debounced)
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (currentResId) {
+                renderGrid();
+            }
+        }, 150);
+    });
+
     init();
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
