@@ -967,15 +967,12 @@ const firebaseConfig = {
                 if (user.email === STAFF_EMAIL) {
                     currentUserRole = 'admin';
                     document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Admin)</span>";
-                    document.getElementById('btnAdminSettings').style.display = '';
                 } else if (user.email === VIEWER_EMAIL) {
                     currentUserRole = 'staff';
                     document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Staff)</span>";
-                    document.getElementById('btnAdminSettings').style.display = 'none';
                 } else {
                     currentUserRole = 'staff'; // Default to limited permissions
                     document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected</span>";
-                    document.getElementById('btnAdminSettings').style.display = 'none';
                 }
                 document.getElementById('loginOverlay').style.display = 'none';
                 setupRealtimeListeners();
