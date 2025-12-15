@@ -545,6 +545,73 @@
             color: var(--primary); 
             margin: 10px 0; 
         }
+        
+        /* Stats Table Styles */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85em;
+        }
+        .stats-table th, .stats-table td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            text-align: center;
+            min-width: 65px;
+        }
+        .stats-table thead th {
+            background: #2196F3;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .stats-table thead th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+        }
+        .stats-table tbody td:first-child {
+            background: #f5f5f5;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .stats-table tfoot td {
+            background: #e3f2fd;
+            font-weight: bold;
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+        }
+        .stats-table tfoot td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: #bbdefb;
+        }
+        .stats-table .stats-closed {
+            background: #9e9e9e !important;
+            color: white;
+            font-style: italic;
+            font-size: 0.8em;
+        }
+        .stats-table .stats-empty {
+            color: #ccc;
+        }
+        .stats-table .stats-weekend td:first-child {
+            background: #ede7f6;
+        }
+        /* Heat map colors - light to dark blue */
+        .stats-heat-0 { background: #fff; }
+        .stats-heat-1 { background: #e3f2fd; }
+        .stats-heat-2 { background: #bbdefb; }
+        .stats-heat-3 { background: #90caf9; }
+        .stats-heat-4 { background: #64b5f6; }
+        .stats-heat-5 { background: #42a5f5; color: white; }
+        .stats-heat-6 { background: #2196f3; color: white; }
+        .stats-heat-7 { background: #1e88e5; color: white; }
+        .stats-heat-8 { background: #1976d2; color: white; }
     </style>
 </head>
 <body>
@@ -579,6 +646,7 @@
         <button class="btn-nav" onclick="navigateTime(1)">&#8594;</button>
         
         <div style="width: 1px; height: 30px; background: #ccc; margin: 0 10px;"></div>
+        <button class="btn-primary" onclick="openStatsModal()" style="background: #7b1fa2;">📊 Stats</button>
         <button id="btnAdminSettings" class="btn-primary" onclick="openAdminPanel()">⚙ Admin</button>
         <button class="btn-danger" onclick="doLogout()">Logout</button>
     </div>
@@ -841,6 +909,43 @@
                 <button class="btn-success" onclick="saveAllSettings()">Save Changes</button>
                 <button onclick="closeModal('settingsOverlay')">Cancel</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Modal -->
+<div id="statsModal" class="modal">
+    <div class="modal-content" style="max-width: 1200px; width: 95%;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>📊 Usage Statistics</span>
+            <button onclick="closeModal('statsModal')" style="background:transparent; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        
+        <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+            <div>
+                <label style="font-weight: bold;">Resource:</label>
+                <select id="statsResourceSelect" onchange="loadStatsData()"></select>
+            </div>
+            <div>
+                <label style="font-weight: bold;">Year:</label>
+                <select id="statsYearSelect" onchange="loadStatsData()"></select>
+            </div>
+            <button class="btn-success" onclick="exportStatsCSV()">📥 Export CSV</button>
+        </div>
+        
+        <div id="statsSummary" style="display: flex; gap: 20px; margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px; flex-wrap: wrap;">
+            <div><strong>Total Hours:</strong> <span id="statsTotalHours">0</span></div>
+            <div><strong>Busiest Month:</strong> <span id="statsBusiestMonth">-</span></div>
+            <div><strong>Avg Hours/Day:</strong> <span id="statsAvgHours">0</span></div>
+            <div><strong>Days Open:</strong> <span id="statsDaysOpen">0</span></div>
+        </div>
+        
+        <div id="statsGridContainer" style="overflow-x: auto; max-height: 60vh; overflow-y: auto;">
+            <table id="statsGrid" class="stats-table">
+                <thead id="statsGridHead"></thead>
+                <tbody id="statsGridBody"></tbody>
+                <tfoot id="statsGridFoot"></tfoot>
+            </table>
         </div>
     </div>
 </div>
@@ -3143,6 +3248,297 @@ const firebaseConfig = {
         const suffix = h >= 12 ? 'pm' : 'am';
         const h12 = h % 12 || 12;
         return `${h12}:${m}${suffix}`;
+    }
+
+    // --- STATS FUNCTIONS ---
+    let statsData = {}; // Cache for loaded stats
+    
+    function getWeekStart(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day;
+        return new Date(d.setDate(diff));
+    }
+    
+    function openStatsModal() {
+        const modal = document.getElementById('statsModal');
+        
+        // Populate resource dropdown
+        const resSel = document.getElementById('statsResourceSelect');
+        resSel.innerHTML = '';
+        resources.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.innerText = r.name;
+            if (r.id === currentResId) opt.selected = true;
+            resSel.appendChild(opt);
+        });
+        
+        // Populate year dropdown (current year and 2 previous)
+        const yearSel = document.getElementById('statsYearSelect');
+        yearSel.innerHTML = '';
+        const currentYear = new Date().getFullYear();
+        for (let y = currentYear; y >= currentYear - 2; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.innerText = y;
+            yearSel.appendChild(opt);
+        }
+        
+        modal.style.display = 'flex';
+        loadStatsData();
+    }
+    
+    async function loadStatsData() {
+        const resId = document.getElementById('statsResourceSelect').value;
+        const year = parseInt(document.getElementById('statsYearSelect').value);
+        const res = resources.find(r => r.id === resId);
+        
+        if (!res) return;
+        
+        showLoading(true);
+        
+        try {
+            // Query all bookings for this resource in the selected year
+            const startDate = new Date(year, 0, 1);
+            const endDate = new Date(year, 11, 31);
+            
+            // Build week keys for the entire year
+            const weekKeys = new Set();
+            let d = new Date(startDate);
+            while (d <= endDate) {
+                const weekStart = getWeekStart(d);
+                weekKeys.add(getWeekKey(weekStart));
+                d.setDate(d.getDate() + 7);
+            }
+            
+            // Load bookings for all weeks
+            const bookings = {};
+            const promises = [];
+            
+            weekKeys.forEach(weekKey => {
+                const prefix = `${resId}_${weekKey}`;
+                const promise = db.collection('appointments')
+                    .where('__name__', '>=', prefix)
+                    .where('__name__', '<', prefix + '\uffff')
+                    .get()
+                    .then(snapshot => {
+                        snapshot.forEach(doc => {
+                            bookings[doc.id] = doc.data();
+                        });
+                    });
+                promises.push(promise);
+            });
+            
+            await Promise.all(promises);
+            
+            // Process bookings into daily totals
+            const dailyStats = {}; // { 'YYYY-MM-DD': { hours: X, closed: bool, reason: '' } }
+            const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            
+            // Initialize all days of the year
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const dayOfWeek = date.getDay();
+                    
+                    // Check if closed (operating hours or closure date)
+                    const dayStart = res.hours[dayOfWeek * 2];
+                    const dayEnd = res.hours[dayOfWeek * 2 + 1];
+                    const closureReason = getClosureReason(res, date);
+                    
+                    dailyStats[dateStr] = {
+                        hours: 0,
+                        closed: (dayStart === dayEnd) || closureReason !== null,
+                        reason: closureReason || (dayStart === dayEnd ? 'Closed' : ''),
+                        dayOfWeek: dayOfWeek
+                    };
+                }
+            }
+            
+            // Tally hours from bookings
+            Object.keys(bookings).forEach(key => {
+                const booking = bookings[key];
+                const parts = key.split('_');
+                // Key format: resId_weekKey_dayIndex_startTime[_subIndex]
+                const weekKey = parts[1];
+                const dayIndex = parseInt(parts[2]);
+                
+                // Calculate actual date from week key and day index
+                const [wy, wm, wd] = weekKey.split('-').map(Number);
+                const weekStart = new Date(wy, wm - 1, wd);
+                const bookingDate = new Date(weekStart);
+                bookingDate.setDate(bookingDate.getDate() + dayIndex);
+                
+                // Only count if in the selected year
+                if (bookingDate.getFullYear() === year) {
+                    const dateStr = formatDateISO(bookingDate);
+                    if (dailyStats[dateStr]) {
+                        dailyStats[dateStr].hours += booking.duration || 0;
+                    }
+                }
+            });
+            
+            renderStatsGrid(dailyStats, year, res);
+            
+        } catch (err) {
+            showToast('Error loading stats: ' + err.message, 'error');
+        }
+        
+        showLoading(false);
+    }
+    
+    function renderStatsGrid(dailyStats, year, res) {
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const thead = document.getElementById('statsGridHead');
+        const tbody = document.getElementById('statsGridBody');
+        const tfoot = document.getElementById('statsGridFoot');
+        
+        // Find max hours for heat map scaling
+        let maxHours = 0;
+        Object.values(dailyStats).forEach(d => {
+            if (d.hours > maxHours) maxHours = d.hours;
+        });
+        if (maxHours === 0) maxHours = 1; // Avoid division by zero
+        
+        // Build header
+        thead.innerHTML = '<tr><th>Day</th>' + MONTHS.map(m => `<th>${m}</th>`).join('') + '<th>Total</th></tr>';
+        
+        // Build rows (days 1-31)
+        let html = '';
+        const monthlyTotals = new Array(12).fill(0);
+        const monthlyClosedDays = new Array(12).fill(0);
+        let grandTotal = 0;
+        let totalDaysOpen = 0;
+        
+        for (let day = 1; day <= 31; day++) {
+            let rowTotal = 0;
+            let isWeekendRow = false;
+            
+            let rowHtml = `<tr>`;
+            rowHtml += `<td>${day}</td>`;
+            
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
+                if (day > daysInMonth) {
+                    // Day doesn't exist in this month
+                    rowHtml += `<td class="stats-empty">-</td>`;
+                } else {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const stat = dailyStats[dateStr];
+                    
+                    if (stat.dayOfWeek === 0 || stat.dayOfWeek === 6) {
+                        isWeekendRow = true;
+                    }
+                    
+                    if (stat.closed) {
+                        const shortReason = stat.reason.length > 8 ? stat.reason.substring(0, 7) + '…' : stat.reason;
+                        rowHtml += `<td class="stats-closed" title="${stat.reason}">${shortReason || 'C'}</td>`;
+                        monthlyClosedDays[month]++;
+                    } else {
+                        const hours = stat.hours;
+                        monthlyTotals[month] += hours;
+                        rowTotal += hours;
+                        grandTotal += hours;
+                        totalDaysOpen++;
+                        
+                        // Calculate heat map level (0-8)
+                        const heatLevel = hours === 0 ? 0 : Math.min(8, Math.ceil((hours / maxHours) * 8));
+                        rowHtml += `<td class="stats-heat-${heatLevel}">${hours > 0 ? hours : ''}</td>`;
+                    }
+                }
+            }
+            
+            rowHtml += `<td>${rowTotal > 0 ? rowTotal : ''}</td>`;
+            rowHtml += `</tr>`;
+            html += rowHtml;
+        }
+        
+        tbody.innerHTML = html;
+        
+        // Build footer (monthly totals)
+        let footHtml = '<tr><td>Total</td>';
+        monthlyTotals.forEach(t => {
+            footHtml += `<td>${t > 0 ? t : '-'}</td>`;
+        });
+        footHtml += `<td><strong>${grandTotal}</strong></td></tr>`;
+        tfoot.innerHTML = footHtml;
+        
+        // Update summary
+        document.getElementById('statsTotalHours').innerText = grandTotal + ' hours';
+        
+        // Find busiest month
+        let busiestIdx = 0;
+        let busiestVal = 0;
+        monthlyTotals.forEach((t, i) => {
+            if (t > busiestVal) {
+                busiestVal = t;
+                busiestIdx = i;
+            }
+        });
+        document.getElementById('statsBusiestMonth').innerText = busiestVal > 0 ? `${MONTHS[busiestIdx]} (${busiestVal}h)` : '-';
+        
+        // Average hours per open day
+        const avgHours = totalDaysOpen > 0 ? (grandTotal / totalDaysOpen).toFixed(1) : 0;
+        document.getElementById('statsAvgHours').innerText = avgHours;
+        document.getElementById('statsDaysOpen').innerText = totalDaysOpen;
+        
+        // Store for CSV export
+        statsData = { dailyStats, year, res, monthlyTotals, grandTotal };
+    }
+    
+    function exportStatsCSV() {
+        if (!statsData.dailyStats) {
+            showToast('No data to export', 'error');
+            return;
+        }
+        
+        const { dailyStats, year, res, monthlyTotals, grandTotal } = statsData;
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        let csv = `${res.name} - Usage Statistics ${year}\n\n`;
+        csv += 'Day,' + MONTHS.join(',') + ',Total\n';
+        
+        for (let day = 1; day <= 31; day++) {
+            let row = [day];
+            let rowTotal = 0;
+            
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
+                if (day > daysInMonth) {
+                    row.push('');
+                } else {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const stat = dailyStats[dateStr];
+                    
+                    if (stat.closed) {
+                        row.push(stat.reason || 'Closed');
+                    } else {
+                        row.push(stat.hours || '');
+                        rowTotal += stat.hours || 0;
+                    }
+                }
+            }
+            
+            row.push(rowTotal > 0 ? rowTotal : '');
+            csv += row.join(',') + '\n';
+        }
+        
+        csv += 'Total,' + monthlyTotals.join(',') + ',' + grandTotal + '\n';
+        
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${res.name.replace(/\s+/g, '_')}_stats_${year}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
     }
 
     // Re-render grid on window resize (debounced)
