@@ -53,7 +53,7 @@
             display: flex;
             align-items: stretch;
             gap: 20px;
-            height: 82vh; /* Moved height here from grid-container */
+            height: 80vh; /* Moved height here from grid-container */
         }
 
         /* === NEW: SIDEBAR STYLES === */
@@ -545,6 +545,71 @@
             color: var(--primary); 
             margin: 10px 0; 
         }
+        
+        /* Stats Table Styles */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85em;
+        }
+        .stats-table th, .stats-table td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            text-align: center;
+            min-width: 65px;
+            cursor: default;
+        }
+        .stats-table thead th {
+            background: #2196F3;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .stats-table thead th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+        }
+        .stats-table tbody td:first-child {
+            background: #f5f5f5;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .stats-table tfoot td {
+            background: #e3f2fd;
+            font-weight: bold;
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+        }
+        .stats-table tfoot td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: #bbdefb;
+        }
+        .stats-table .stats-closed {
+            background: #9e9e9e !important;
+            color: white;
+            font-style: italic;
+            font-size: 0.8em;
+        }
+        .stats-table .stats-weekend td:first-child {
+            background: #ede7f6;
+        }
+        /* Heat map colors - light to dark blue */
+        .stats-heat-0 { background: #fff; }
+        .stats-heat-1 { background: #e3f2fd; }
+        .stats-heat-2 { background: #bbdefb; }
+        .stats-heat-3 { background: #90caf9; }
+        .stats-heat-4 { background: #64b5f6; }
+        .stats-heat-5 { background: #42a5f5; color: white; }
+        .stats-heat-6 { background: #2196f3; color: white; }
+        .stats-heat-7 { background: #1e88e5; color: white; }
+        .stats-heat-8 { background: #1976d2; color: white; }
     </style>
 </head>
 <body>
@@ -579,7 +644,8 @@
         <button class="btn-nav" onclick="navigateTime(1)">&#8594;</button>
         
         <div style="width: 1px; height: 30px; background: #ccc; margin: 0 10px;"></div>
-        <button class="btn-primary" onclick="openAdminPanel()">⚙ Admin</button>
+        <button class="btn-primary" onclick="openStatsModal()" style="background: #7b1fa2;">📊 Stats</button>
+        <button id="btnAdminSettings" class="btn-primary" onclick="openAdminPanel()">⚙ Admin</button>
         <button class="btn-danger" onclick="doLogout()">Logout</button>
     </div>
 </header>
@@ -627,9 +693,12 @@
         </div>
         
         <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-            <button class="btn-success" onclick="saveBooking()">Save Booking</button>
-            <button class="btn-danger" onclick="deleteBooking()">Delete</button>
+            <button id="btnSaveBooking" class="btn-success" onclick="saveBooking()">Save Booking</button>
+            <button id="btnDeleteBooking" class="btn-danger" onclick="deleteBooking()">Delete</button>
             <button onclick="closeModal('bookingModal')">Cancel</button>
+        </div>
+        <div id="readOnlyNotice" class="hidden" style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; text-align: center; color: #856404;">
+            🔒 This resource is admin-only. View only.
         </div>
     </div>
 </div>
@@ -798,6 +867,10 @@
                         <input type="checkbox" id="editDefaultShowNotes" style="width:auto;">
                         <label for="editDefaultShowNotes" style="margin:0; cursor:pointer;">Default "Show Notes" to Checked?</label>
                     </div>
+                    <div class="flex gap" style="margin-top:8px; padding-top:8px; border-top:1px solid #d0e1f5;">
+                        <input type="checkbox" id="editAdminOnly" style="width:auto;">
+                        <label for="editAdminOnly" style="margin:0; cursor:pointer;">🔒 Admin Only (restrict editing to admin account)</label>
+                    </div>
                 </div>
 
                 <!-- Closure Dates Section -->
@@ -838,6 +911,47 @@
     </div>
 </div>
 
+<!-- Stats Modal -->
+<div id="statsModal" class="modal">
+    <div class="modal-content" style="max-width: 1200px; width: 95%;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>📊 Usage Statistics</span>
+            <button onclick="closeModal('statsModal')" style="background:transparent; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        
+        <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+            <div>
+                <label style="font-weight: bold;">Resource:</label>
+                <select id="statsResourceSelect" onchange="handleStatsResourceChange()"></select>
+            </div>
+            <div>
+                <label style="font-weight: bold;">Year:</label>
+                <select id="statsYearSelect" onchange="loadStatsData()"></select>
+            </div>
+            <button class="btn-success" onclick="exportStatsCSV()">📥 Export CSV</button>
+        </div>
+        
+        <div id="statsSummary" style="display: flex; gap: 20px; margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px; flex-wrap: wrap;">
+            <div><strong>Total Hours:</strong> <span id="statsTotalHours">0</span></div>
+            <div><strong>Busiest Month:</strong> <span id="statsBusiestMonth">-</span></div>
+            <div><strong>Avg Hours/Day:</strong> <span id="statsAvgHours">0</span></div>
+            <div><strong>Days Open:</strong> <span id="statsDaysOpen">0</span></div>
+        </div>
+        
+        <div id="statsGridContainer" style="overflow-x: auto; max-height: 60vh; overflow-y: auto;">
+            <table id="statsGrid" class="stats-table">
+                <thead id="statsGridHead"></thead>
+                <tbody id="statsGridBody"></tbody>
+                <tfoot id="statsGridFoot"></tfoot>
+            </table>
+        </div>
+        
+        <div style="margin-top: 15px; text-align: right;">
+            <button onclick="closeModal('statsModal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <div id="toast-container"></div>
 
 <script>
@@ -857,6 +971,8 @@ const firebaseConfig = {
     const auth = firebase.auth();
 
     const STAFF_EMAIL = "staff@library.internal"; 
+    const VIEWER_EMAIL = "viewer@library.internal";
+    let currentUserRole = null; // 'admin' or 'staff' 
     const ADMIN_PASS = "library"; 
 
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -954,10 +1070,21 @@ const firebaseConfig = {
 
         auth.onAuthStateChanged(user => {
             if (user) {
+                // Determine role based on which email logged in
+                if (user.email === STAFF_EMAIL) {
+                    currentUserRole = 'admin';
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected</span>";
+                } else if (user.email === VIEWER_EMAIL) {
+                    currentUserRole = 'staff';
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Staff)</span>";
+                } else {
+                    currentUserRole = 'staff'; // Default to limited permissions
+                    document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected</span>";
+                }
                 document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('status-bar').innerHTML = "<span class='online'>● Connected (Staff)</span>";
                 setupRealtimeListeners();
             } else {
+                currentUserRole = null;
                 document.getElementById('loginOverlay').style.display = 'flex';
                 document.getElementById('status-bar').innerHTML = "<span class='offline'>Locked</span>";
             }
@@ -970,16 +1097,28 @@ const firebaseConfig = {
         const err = document.getElementById('loginError');
         err.classList.add('hidden');
         
+        // Try admin account first, then viewer account
         auth.signInWithEmailAndPassword(STAFF_EMAIL, pass)
             .catch(error => {
+                // If admin login fails, try viewer account
+                return auth.signInWithEmailAndPassword(VIEWER_EMAIL, pass);
+            })
+            .catch(error => {
                 err.classList.remove('hidden');
-                err.innerText = "Error: " + error.message;
+                err.innerText = "Error: Invalid password";
             });
     }
 
     function doLogout() {
         auth.signOut();
         location.reload();
+    }
+    
+    // Check if current user can edit this resource
+    function canEditResource(res) {
+        if (currentUserRole === 'admin') return true;
+        if (!res) return false;
+        return !res.adminOnly; // staff can edit if not admin-only
     }
 
     function setupRealtimeListeners() {
@@ -995,6 +1134,8 @@ const firebaseConfig = {
     }
 
     // --- CORE LOGIC ---
+    let loadVersion = 0; // Track which load request is current
+    
     function loadBookingsForCurrentView() {
         if (activeListenerUnsub) {
             activeListenerUnsub();
@@ -1006,11 +1147,18 @@ const firebaseConfig = {
 
         const activeWeekKey = getWeekKey(currentWeekStart); 
         const queryPrefix = `${res.id}_${activeWeekKey}`;
+        
+        // Increment version for this load request
+        loadVersion++;
+        const thisVersion = loadVersion;
 
         activeListenerUnsub = db.collection('appointments')
             .where(firebase.firestore.FieldPath.documentId(), '>=', queryPrefix)
             .where(firebase.firestore.FieldPath.documentId(), '<', queryPrefix + '\uf8ff') 
             .onSnapshot((snapshot) => {
+                // Only process if this is still the current request
+                if (thisVersion !== loadVersion) return;
+                
                 allBookings = {}; 
                 snapshot.forEach((doc) => { 
                     allBookings[doc.id] = doc.data(); 
@@ -1058,9 +1206,13 @@ const firebaseConfig = {
         if(document.getElementById('settingsOverlay').style.display !== 'none') loadSettingsForEditor();
     }
 
+    let navDebounceTimeout = null;
+    
     function navigateTime(dir) {
         const res = resources.find(r => r.id === currentResId);
         const isDayView = res && res.viewMode === 'day';
+        
+        // Update dates immediately for responsive UI
         if (isDayView) {
             currentDayDate.setDate(currentDayDate.getDate() + dir);
             const d = new Date(currentDayDate);
@@ -1071,8 +1223,15 @@ const firebaseConfig = {
             currentWeekStart.setDate(currentWeekStart.getDate() + (dir * 7));
             currentDayDate = new Date(currentWeekStart);
         }
+        
+        // Update UI immediately
         updateUIControls();
-        loadBookingsForCurrentView();
+        
+        // Debounce the data loading to avoid race conditions
+        clearTimeout(navDebounceTimeout);
+        navDebounceTimeout = setTimeout(() => {
+            loadBookingsForCurrentView();
+        }, 150);
     }
 
     function handleDatePick() {
@@ -1267,25 +1426,32 @@ const firebaseConfig = {
                         let emptyId = `${res.id}_${activeWeekKey}_${col.dayIndex}_${timeVal}`;
                         if (col.subIndex !== null) emptyId += `_${col.subIndex}`;
                         
-                        slot.onclick = (e) => {
-                            if (selectionState.active) return;
-                            if (resizeJustEnded) return;
-                            openBookingModal(emptyId, null, col.subIndex);
-                        };
+                        const canEdit = canEditResource(res);
                         
+                        // Always show time tooltip on hover
                         slot.setAttribute('data-time', `${displayTime} - ${formatTime(timeVal + 0.5)}`);
                         
-                        // DRAG-AND-DROP: Set up empty slots as drop targets
-                        slot.dataset.slotId = emptyId;
-                        slot.dataset.dayIndex = col.dayIndex;
-                        slot.dataset.timeVal = timeVal;
-                        slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
-                        slot.ondragover = handleDragOver;
-                        slot.ondragleave = handleDragLeave;
-                        slot.ondrop = handleDrop;
-                        
-                        // DRAG-TO-CREATE: mousedown starts selection
-                        slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
+                        if (canEdit) {
+                            slot.onclick = (e) => {
+                                if (selectionState.active) return;
+                                if (resizeJustEnded) return;
+                                openBookingModal(emptyId, null, col.subIndex);
+                            };
+                            
+                            // DRAG-AND-DROP: Set up empty slots as drop targets
+                            slot.dataset.slotId = emptyId;
+                            slot.dataset.dayIndex = col.dayIndex;
+                            slot.dataset.timeVal = timeVal;
+                            slot.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                            slot.ondragover = handleDragOver;
+                            slot.ondragleave = handleDragLeave;
+                            slot.ondrop = handleDrop;
+                            
+                            // DRAG-TO-CREATE: mousedown starts selection
+                            slot.onmousedown = (e) => startSelection(e, emptyId, timeVal, col, res, activeWeekKey, slot);
+                        } else {
+                            slot.style.cursor = 'default';
+                        }
                     }
                     
                     // Store reference to this slot for positioning bookings
@@ -1345,11 +1511,15 @@ const firebaseConfig = {
                     bookingEl.innerHTML += `<span class="slot-notes" style="font-size:0.8em; margin-top:4px; opacity:0.75; font-style:italic;">📝 Click to view note</span>`;
                 }
                 
-                // Add resize handle
-                const resizeHandle = document.createElement('div');
-                resizeHandle.className = 'resize-handle';
-                resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
-                bookingEl.appendChild(resizeHandle);
+                const canEdit = canEditResource(res);
+                
+                // Add resize handle only if user can edit
+                if (canEdit) {
+                    const resizeHandle = document.createElement('div');
+                    resizeHandle.className = 'resize-handle';
+                    resizeHandle.onmousedown = (e) => startResize(e, booking, col, res, activeWeekKey, bookingEl);
+                    bookingEl.appendChild(resizeHandle);
+                }
                 
                 // Event handlers - popover on hover
                 bookingEl.onmouseenter = (e) => {
@@ -1371,19 +1541,23 @@ const firebaseConfig = {
                     openBookingModal(booking.id, booking.data, col.subIndex);
                 };
                 
-                // DRAG-AND-DROP
-                bookingEl.draggable = true;
-                bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
-                bookingEl.ondragend = handleDragEnd;
-                
-                bookingEl.dataset.bookingId = booking.id;
-                bookingEl.dataset.bookingStart = booking.start;
-                bookingEl.dataset.bookingDuration = booking.data.duration;
-                bookingEl.dataset.dayIndex = col.dayIndex;
-                bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
-                bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
-                bookingEl.ondragleave = handleDragLeave;
-                bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                // DRAG-AND-DROP (only if user can edit)
+                if (canEdit) {
+                    bookingEl.draggable = true;
+                    bookingEl.ondragstart = (e) => handleDragStart(e, booking.id, booking.data);
+                    bookingEl.ondragend = handleDragEnd;
+                    
+                    bookingEl.dataset.bookingId = booking.id;
+                    bookingEl.dataset.bookingStart = booking.start;
+                    bookingEl.dataset.bookingDuration = booking.data.duration;
+                    bookingEl.dataset.dayIndex = col.dayIndex;
+                    bookingEl.dataset.subIndex = col.subIndex !== null ? col.subIndex : '';
+                    bookingEl.ondragover = (e) => handleBookedSlotDragOver(e, booking, col, res, activeWeekKey);
+                    bookingEl.ondragleave = handleDragLeave;
+                    bookingEl.ondrop = (e) => handleBookedSlotDrop(e, booking, col, res, activeWeekKey);
+                } else {
+                    bookingEl.style.cursor = 'default';
+                }
                 
                 container.appendChild(bookingEl);
                 
@@ -2089,6 +2263,20 @@ const firebaseConfig = {
             durSel.appendChild(opt);
         }
         
+        // Check permissions and show/hide edit controls
+        const canEdit = canEditResource(res);
+        document.getElementById('btnSaveBooking').style.display = canEdit ? '' : 'none';
+        document.getElementById('btnDeleteBooking').style.display = 'none'; // New booking, no delete
+        document.getElementById('readOnlyNotice').style.display = canEdit ? 'none' : '';
+        
+        // Enable/disable form fields based on permissions
+        document.getElementById('bookName').disabled = !canEdit;
+        document.getElementById('bookDuration').disabled = !canEdit;
+        document.getElementById('bookNotes').disabled = !canEdit;
+        document.getElementById('bookShowNotes').disabled = !canEdit;
+        document.getElementById('bookHasStaff').disabled = !canEdit;
+        document.getElementById('bookStaffName').disabled = !canEdit;
+        
         modal.style.display = 'flex';
         document.getElementById('bookName').focus();
     }
@@ -2379,6 +2567,9 @@ const firebaseConfig = {
             
             await batch.commit();
             
+            // Update stats metadata for the new location
+            updateStatsYearMeta(currentResId, targetId);
+            
             showToast("Booking moved successfully!", "success");
         } catch (error) {
             console.error("Move error:", error);
@@ -2475,6 +2666,21 @@ const firebaseConfig = {
             durSel.appendChild(opt);
         }
         if(durSel.options.length === 0) { const opt = document.createElement('option'); opt.innerText = "No time available"; durSel.appendChild(opt); }
+        
+        // Check permissions and show/hide edit controls
+        const canEdit = canEditResource(res);
+        document.getElementById('btnSaveBooking').style.display = canEdit ? '' : 'none';
+        document.getElementById('btnDeleteBooking').style.display = (canEdit && data) ? '' : 'none';
+        document.getElementById('readOnlyNotice').style.display = canEdit ? 'none' : '';
+        
+        // Disable form fields if read-only
+        document.getElementById('bookName').disabled = !canEdit;
+        document.getElementById('bookDuration').disabled = !canEdit;
+        document.getElementById('bookNotes').disabled = !canEdit;
+        document.getElementById('bookShowNotes').disabled = !canEdit;
+        document.getElementById('bookHasStaff').disabled = !canEdit;
+        document.getElementById('bookStaffName').disabled = !canEdit;
+        
         modal.style.display = 'flex';
     }
 
@@ -2546,7 +2752,11 @@ const firebaseConfig = {
         };
 
         showLoading(true);
-        try { await db.collection('appointments').doc(slotId).set(data); closeModal('bookingModal'); } 
+        try { 
+            await db.collection('appointments').doc(slotId).set(data); 
+            updateStatsYearMeta(res.id, slotId); // Update stats metadata
+            closeModal('bookingModal'); 
+        } 
         catch(e) { showToast("Error: " + e.message, "error"); }
         showLoading(false);
     }
@@ -2569,6 +2779,7 @@ const firebaseConfig = {
         document.getElementById('editViewMode').value = r.viewMode || 'week';
         document.getElementById('editSubRooms').value = r.subRooms || '';
         document.getElementById('editDefaultShowNotes').checked = r.defaultShowNotes || false;
+        document.getElementById('editAdminOnly').checked = r.adminOnly || false;
         
         // Load Sidebar Settings
         document.getElementById('editEnableSidebar').checked = r.enableSidebar || false;
@@ -2936,6 +3147,7 @@ const firebaseConfig = {
         target.viewMode = document.getElementById('editViewMode').value;
         target.subRooms = document.getElementById('editSubRooms').value;
         target.defaultShowNotes = document.getElementById('editDefaultShowNotes').checked;
+        target.adminOnly = document.getElementById('editAdminOnly').checked;
 
         // Save Sidebar Settings
         target.enableSidebar = document.getElementById('editEnableSidebar').checked;
@@ -2986,7 +3198,11 @@ const firebaseConfig = {
         }
         
         if (booking.data.notes) {
-            html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+            if (booking.data.showNotes) {
+                html += `<div class="popover-notes">${escapeHtml(booking.data.notes)}</div>`;
+            } else {
+                html += `<div class="popover-notes" style="font-style: italic; opacity: 0.8;">📝 Click to view note</div>`;
+            }
         }
         
         popover.innerHTML = html;
@@ -3063,6 +3279,399 @@ const firebaseConfig = {
         return `${h12}:${m}${suffix}`;
     }
 
+    // --- STATS FUNCTIONS ---
+    let statsData = {}; // Cache for loaded stats
+    
+    function getWeekStart(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day;
+        return new Date(d.setDate(diff));
+    }
+    
+    // Update stats metadata when a booking is saved
+    async function updateStatsYearMeta(resId, slotId) {
+        try {
+            // Extract year from slotId (format: resId_weekKey_dayIndex_startTime)
+            const prefix = resId + '_';
+            const suffix = slotId.substring(prefix.length);
+            const weekKey = suffix.split('_')[0]; // YYYY-MM-DD
+            const year = parseInt(weekKey.split('-')[0]);
+            
+            if (isNaN(year)) return;
+            
+            // Get current metadata
+            const metaRef = db.collection('system').doc('stats_meta');
+            const metaDoc = await metaRef.get();
+            
+            let meta = metaDoc.exists ? metaDoc.data() : {};
+            
+            // Add year if not already present for this resource
+            if (!meta[resId]) {
+                meta[resId] = [];
+            }
+            
+            if (!meta[resId].includes(year)) {
+                meta[resId].push(year);
+                meta[resId].sort((a, b) => b - a); // Sort descending
+                await metaRef.set(meta);
+            }
+        } catch (err) {
+            console.error('Error updating stats meta:', err);
+            // Non-critical, don't block the save
+        }
+    }
+    
+    async function openStatsModal() {
+        const modal = document.getElementById('statsModal');
+        
+        // Populate resource dropdown
+        const resSel = document.getElementById('statsResourceSelect');
+        resSel.innerHTML = '';
+        resources.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.innerText = r.name;
+            if (r.id === currentResId) opt.selected = true;
+            resSel.appendChild(opt);
+        });
+        
+        modal.style.display = 'flex';
+        await populateYearDropdown();
+        loadStatsData();
+    }
+    
+    async function populateYearDropdown() {
+        const resId = document.getElementById('statsResourceSelect').value;
+        const yearSel = document.getElementById('statsYearSelect');
+        const previousSelection = yearSel.value;
+        
+        yearSel.innerHTML = '<option>Loading...</option>';
+        
+        try {
+            // Read from stats_meta document (single read)
+            const metaDoc = await db.collection('system').doc('stats_meta').get();
+            
+            const yearsWithData = new Set();
+            
+            if (metaDoc.exists && metaDoc.data()[resId]) {
+                metaDoc.data()[resId].forEach(y => yearsWithData.add(y));
+            }
+            
+            // Always include current and next year
+            const currentYear = new Date().getFullYear();
+            yearsWithData.add(currentYear);
+            yearsWithData.add(currentYear + 1);
+            
+            // Sort descending (newest first)
+            const sortedYears = Array.from(yearsWithData).sort((a, b) => b - a);
+            
+            yearSel.innerHTML = '';
+            sortedYears.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y;
+                // Restore previous selection or default to current year
+                if (previousSelection && parseInt(previousSelection) === y) {
+                    opt.selected = true;
+                } else if (!previousSelection && y === currentYear) {
+                    opt.selected = true;
+                }
+                yearSel.appendChild(opt);
+            });
+            
+        } catch (err) {
+            console.error('Error loading years:', err);
+            // Fallback to current + next year
+            const currentYear = new Date().getFullYear();
+            yearSel.innerHTML = '';
+            [currentYear, currentYear + 1].forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y;
+                if (y === currentYear) opt.selected = true;
+                yearSel.appendChild(opt);
+            });
+        }
+    }
+    
+    async function handleStatsResourceChange() {
+        await populateYearDropdown();
+        loadStatsData();
+    }
+    
+    async function loadStatsData() {
+        const resId = document.getElementById('statsResourceSelect').value;
+        const year = parseInt(document.getElementById('statsYearSelect').value);
+        const res = resources.find(r => r.id === resId);
+        
+        if (!res) return;
+        
+        showLoading(true);
+        
+        try {
+            // Query all bookings for this resource in the selected year
+            const startDate = new Date(year, 0, 1);
+            const endDate = new Date(year, 11, 31);
+            
+            // Build week keys for the entire year
+            const weekKeys = new Set();
+            let d = new Date(startDate);
+            while (d <= endDate) {
+                const weekStart = getWeekStart(d);
+                weekKeys.add(getWeekKey(weekStart));
+                d.setDate(d.getDate() + 7);
+            }
+            
+            // Load bookings for all weeks
+            const bookings = {};
+            const promises = [];
+            
+            weekKeys.forEach(weekKey => {
+                const prefix = `${resId}_${weekKey}`;
+                const promise = db.collection('appointments')
+                    .where('__name__', '>=', prefix)
+                    .where('__name__', '<', prefix + '\uffff')
+                    .get()
+                    .then(snapshot => {
+                        snapshot.forEach(doc => {
+                            bookings[doc.id] = doc.data();
+                        });
+                    });
+                promises.push(promise);
+            });
+            
+            await Promise.all(promises);
+            
+            // If we found bookings for this year, ensure stats_meta is updated (self-healing)
+            if (Object.keys(bookings).length > 0) {
+                updateStatsYearMeta(resId, Object.keys(bookings)[0]);
+            }
+            
+            // Process bookings into daily totals
+            const dailyStats = {}; // { 'YYYY-MM-DD': { hours: X, closed: bool, reason: '' } }
+            const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            
+            // Initialize all days of the year
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const dayOfWeek = date.getDay();
+                    
+                    // Check if closed (operating hours or closure date)
+                    const dayStart = res.hours[dayOfWeek * 2];
+                    const dayEnd = res.hours[dayOfWeek * 2 + 1];
+                    const closureReason = getClosureReason(res, date);
+                    
+                    dailyStats[dateStr] = {
+                        hours: 0,
+                        closed: (dayStart === dayEnd) || closureReason !== null,
+                        reason: closureReason || (dayStart === dayEnd ? 'Closed' : ''),
+                        dayOfWeek: dayOfWeek
+                    };
+                }
+            }
+            
+            // Tally hours from bookings
+            Object.keys(bookings).forEach(key => {
+                const booking = bookings[key];
+                // Remove resource ID prefix first
+                const prefix = resId + '_';
+                const suffix = key.substring(prefix.length);
+                const parts = suffix.split('_');
+                // Key format after prefix removal: weekKey_dayIndex_startTime[_subIndex]
+                const weekKey = parts[0];
+                const dayIndex = parseInt(parts[1]);
+                
+                // Calculate actual date from week key and day index
+                const [wy, wm, wd] = weekKey.split('-').map(Number);
+                const weekStart = new Date(wy, wm - 1, wd);
+                const bookingDate = new Date(weekStart);
+                bookingDate.setDate(bookingDate.getDate() + dayIndex);
+                
+                // Only count if in the selected year
+                if (bookingDate.getFullYear() === year) {
+                    const dateStr = formatDateISO(bookingDate);
+                    if (dailyStats[dateStr]) {
+                        dailyStats[dateStr].hours += booking.duration || 0;
+                    }
+                }
+            });
+            
+            renderStatsGrid(dailyStats, year, res);
+            
+        } catch (err) {
+            showToast('Error loading stats: ' + err.message, 'error');
+        }
+        
+        showLoading(false);
+    }
+    
+    function renderStatsGrid(dailyStats, year, res) {
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const thead = document.getElementById('statsGridHead');
+        const tbody = document.getElementById('statsGridBody');
+        const tfoot = document.getElementById('statsGridFoot');
+        
+        // Find max hours for heat map scaling
+        let maxHours = 0;
+        Object.values(dailyStats).forEach(d => {
+            if (d.hours > maxHours) maxHours = d.hours;
+        });
+        if (maxHours === 0) maxHours = 1; // Avoid division by zero
+        
+        // Build header
+        thead.innerHTML = '<tr><th>Day</th>' + MONTHS.map(m => `<th>${m}</th>`).join('') + '</tr>';
+        
+        // Helper to format date with ordinal suffix
+        function formatDateWithOrdinal(month, day, year) {
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            const suffix = (day === 1 || day === 21 || day === 31) ? 'st' : 
+                          (day === 2 || day === 22) ? 'nd' : 
+                          (day === 3 || day === 23) ? 'rd' : 'th';
+            return `${monthNames[month]} ${day}${suffix}, ${year}`;
+        }
+        
+        // Build rows (days 1-31)
+        let html = '';
+        const monthlyTotals = new Array(12).fill(0);
+        const monthlyClosedDays = new Array(12).fill(0);
+        let grandTotal = 0;
+        let totalDaysOpen = 0;
+        
+        for (let day = 1; day <= 31; day++) {
+            let rowTotal = 0;
+            let isWeekendRow = false;
+            
+            let rowHtml = `<tr>`;
+            rowHtml += `<td>${day}</td>`;
+            
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
+                if (day > daysInMonth) {
+                    // Day doesn't exist in this month - show as gray
+                    rowHtml += `<td class="stats-closed"></td>`;
+                } else {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const stat = dailyStats[dateStr];
+                    const dateTooltip = formatDateWithOrdinal(month, day, year);
+                    
+                    if (stat.dayOfWeek === 0 || stat.dayOfWeek === 6) {
+                        isWeekendRow = true;
+                    }
+                    
+                    if (stat.closed) {
+                        const shortReason = stat.reason.length > 8 ? stat.reason.substring(0, 7) + '…' : stat.reason;
+                        const closedTooltip = `${dateTooltip} - ${stat.reason}`;
+                        rowHtml += `<td class="stats-closed" title="${closedTooltip}">${shortReason || 'C'}</td>`;
+                        monthlyClosedDays[month]++;
+                    } else {
+                        const hours = stat.hours;
+                        monthlyTotals[month] += hours;
+                        rowTotal += hours;
+                        grandTotal += hours;
+                        totalDaysOpen++;
+                        
+                        // Calculate heat map level (0-8)
+                        const heatLevel = hours === 0 ? 0 : Math.min(8, Math.ceil((hours / maxHours) * 8));
+                        const hoursText = hours > 0 ? `${hours} hour${hours === 1 ? '' : 's'}` : 'No bookings';
+                        rowHtml += `<td class="stats-heat-${heatLevel}" title="${dateTooltip} - ${hoursText}">${hours > 0 ? hours : ''}</td>`;
+                    }
+                }
+            }
+            
+            rowHtml += `</tr>`;
+            html += rowHtml;
+        }
+        
+        tbody.innerHTML = html;
+        
+        // Build footer (monthly totals)
+        let footHtml = '<tr><td>Total</td>';
+        monthlyTotals.forEach(t => {
+            footHtml += `<td>${t > 0 ? t : '-'}</td>`;
+        });
+        footHtml += '</tr>';
+        tfoot.innerHTML = footHtml;
+        
+        // Update summary
+        document.getElementById('statsTotalHours').innerText = grandTotal + ' hours';
+        
+        // Find busiest month
+        let busiestIdx = 0;
+        let busiestVal = 0;
+        monthlyTotals.forEach((t, i) => {
+            if (t > busiestVal) {
+                busiestVal = t;
+                busiestIdx = i;
+            }
+        });
+        document.getElementById('statsBusiestMonth').innerText = busiestVal > 0 ? `${MONTHS[busiestIdx]} (${busiestVal}h)` : '-';
+        
+        // Average hours per open day
+        const avgHours = totalDaysOpen > 0 ? (grandTotal / totalDaysOpen).toFixed(1) : 0;
+        document.getElementById('statsAvgHours').innerText = avgHours;
+        document.getElementById('statsDaysOpen').innerText = totalDaysOpen;
+        
+        // Store for CSV export
+        statsData = { dailyStats, year, res, monthlyTotals, grandTotal };
+    }
+    
+    function exportStatsCSV() {
+        if (!statsData.dailyStats) {
+            showToast('No data to export', 'error');
+            return;
+        }
+        
+        const { dailyStats, year, res, monthlyTotals, grandTotal } = statsData;
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        let csv = `${res.name} - Usage Statistics ${year}\n\n`;
+        csv += 'Day,' + MONTHS.join(',') + ',Total\n';
+        
+        for (let day = 1; day <= 31; day++) {
+            let row = [day];
+            let rowTotal = 0;
+            
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
+                if (day > daysInMonth) {
+                    row.push('');
+                } else {
+                    const date = new Date(year, month, day);
+                    const dateStr = formatDateISO(date);
+                    const stat = dailyStats[dateStr];
+                    
+                    if (stat.closed) {
+                        row.push(stat.reason || 'Closed');
+                    } else {
+                        row.push(stat.hours || '');
+                        rowTotal += stat.hours || 0;
+                    }
+                }
+            }
+            
+            row.push(rowTotal > 0 ? rowTotal : '');
+            csv += row.join(',') + '\n';
+        }
+        
+        csv += 'Total,' + monthlyTotals.join(',') + ',' + grandTotal + '\n';
+        
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${res.name.replace(/\s+/g, '_')}_stats_${year}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
     // Re-render grid on window resize (debounced)
     let resizeTimeout;
     window.addEventListener('resize', () => {
@@ -3078,3 +3687,5 @@ const firebaseConfig = {
 </script>
 </body>
 </html>
+
+
